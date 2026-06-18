@@ -1,0 +1,49 @@
+# =============================================================================
+# Stage 1: Build
+# =============================================================================
+FROM node:18-alpine AS build
+
+# Install build dependencies for native modules (better-sqlite3)
+RUN apk add --no-cache python3 make g++
+
+WORKDIR /app
+
+# Install all dependencies (including devDependencies for tsc)
+COPY backend/package.json backend/package-lock.json ./
+RUN npm ci
+
+# Copy TypeScript config and source files
+COPY backend/tsconfig.json ./
+COPY backend/src/ ./src/
+
+# Compile TypeScript to JavaScript
+RUN npm run build
+
+# =============================================================================
+# Stage 2: Production
+# =============================================================================
+FROM node:18-alpine AS prod
+
+WORKDIR /app
+
+# Copy package files and install only production dependencies
+COPY backend/package.json backend/package-lock.json ./
+RUN npm ci --omit=dev
+
+# Copy compiled native modules from build stage (better-sqlite3 compiled for Alpine)
+# This ensures the native module works even if npm ci --omit=dev couldn't find
+# a prebuilt binary for musl/alpine.
+COPY --from=build /app/node_modules/better-sqlite3/ ./node_modules/better-sqlite3/
+
+# Copy compiled JavaScript from build stage
+COPY --from=build /app/dist/ ./dist/
+
+# Create data directory for SQLite database
+RUN mkdir -p /app/data && chown -R node:node /app/data
+
+EXPOSE 3001
+
+# Run as non-root user
+USER node
+
+CMD ["node", "dist/index.js"]
