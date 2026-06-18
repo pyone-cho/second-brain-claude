@@ -1,7 +1,8 @@
-import { useEffect, lazy, Suspense } from 'react';
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { useTheme } from '@/hooks/useTheme';
 import { Layout } from '@/components/layout/Layout';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 
 const DashboardPage = lazy(() =>
   import('@/pages/DashboardPage').then((m) => ({ default: m.DashboardPage }))
@@ -18,6 +19,9 @@ const MemoPage = lazy(() =>
 const ItemFormPage = lazy(() =>
   import('@/pages/ItemFormPage').then((m) => ({ default: m.ItemFormPage }))
 );
+const LoginPage = lazy(() =>
+  import('@/pages/LoginPage').then((m) => ({ default: m.LoginPage }))
+);
 
 function PageFallback() {
   return (
@@ -33,27 +37,35 @@ function PageFallback() {
 export function App() {
   useTheme();
 
-  useEffect(() => {
-    const root = document.documentElement;
-    root.classList.add('dark');
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    if (!mq.matches) root.classList.remove('dark');
-  }, []);
-
   return (
     <BrowserRouter>
-      <Layout>
-        <Suspense fallback={<PageFallback />}>
-          <Routes>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/todo" element={<TodoPage />} />
-            <Route path="/process" element={<ProcessPage />} />
-            <Route path="/memo" element={<MemoPage />} />
-            <Route path="/items/new" element={<ItemFormPage />} />
-            <Route path="/items/:id/edit" element={<ItemFormPage />} />
-          </Routes>
-        </Suspense>
-      </Layout>
+      <Suspense fallback={<PageFallback />}>
+        <Routes>
+          {/* Login page — no Layout wrapper, full-page standalone */}
+          <Route path="/login" element={<LoginPage />} />
+
+          {/* All other routes — wrapped in Layout + authentication guard */}
+          <Route
+            path="/*"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Suspense fallback={<PageFallback />}>
+                    <Routes>
+                      <Route path="/" element={<DashboardPage />} />
+                      <Route path="/todo" element={<TodoPage />} />
+                      <Route path="/process" element={<ProcessPage />} />
+                      <Route path="/memo" element={<MemoPage />} />
+                      <Route path="/items/new" element={<ItemFormPage />} />
+                      <Route path="/items/:id/edit" element={<ItemFormPage />} />
+                    </Routes>
+                  </Suspense>
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }
