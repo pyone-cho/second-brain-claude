@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import clsx from 'clsx';
+import { useAuth } from '@/hooks/useAuth';
 
 interface Tab {
   path: string;
@@ -49,6 +50,12 @@ const tabs: Tab[] = [
 
 export function TabBar() {
   const location = useLocation();
+  const { isAuthenticated } = useAuth();
+
+  // Hide tab bar entirely if the user is not authenticated
+  if (!isAuthenticated()) {
+    return null;
+  }
 
   return (
     <nav

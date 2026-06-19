@@ -8,6 +8,7 @@ A personal knowledge management system for tracking tasks, reading, purchases, a
 
 - **Single Server Website** — frontend AND backend implemented
   - Frontend: React 18 + TypeScript + Vite + Tailwind CSS ✓
+    - Authentication (login/register) ✓
   - Backend: Node.js + Express + TypeScript + SQLite (better-sqlite3) ✓
 
 ---
@@ -83,6 +84,41 @@ Infrastructure-related tasks with technical details:
 1. **Add to Todo**: User captures quick thoughts, tasks, or plans
 2. **Move to Process**: User actively works on the item, adds notes/experience
 3. **Archive to Memo**: Item is complete, knowledge is saved for future reference
+
+---
+
+## Authentication (Implemented)
+
+The web frontend includes a complete authentication system with login, registration, and route protection.
+
+### Features
+- **Login page** — Standalone full-page design with branding panel and form
+- **Sign In** — Email + password with client-side validation and show/hide toggle
+- **Sign Up** — Name + email + password with strength indicator and confirm password match check
+- **Route protection** — All app routes are guarded; unauthenticated users are redirected to `/login`
+- **Persistent sessions** — Auth state stored in localStorage, survives page refresh
+- **User menu** — Avatar/initials circle in header, dropdown with user info and sign-out
+- **Password strength meter** — Visual indicator (weak/medium/strong) based on length, character variety, and special chars
+- **Validation** — Real-time field validation on blur, full validation on submit
+- **Error handling** — Dismissible error banner for API/auth failures
+- **Loading states** — Spinner on submit button, inputs disabled during request
+- **Dark mode** — Full dark mode support on login page
+- **Mock API** — Simulated 800ms delay with client-side validation; any valid email + password (6+ chars) works
+
+### Auth Store
+- Separate Zustand store (`authStore.ts`) with persist middleware
+- localStorage key: `second-brain-auth`
+- State: `user`, `token`, `isLoading`, `error`
+- Actions: `login()`, `register()`, `logout()`, `clearError()`
+- `isAuthenticated()` getter checks token and user existence
+
+### Components
+- `LoginPage` — Full-page login/register with branding panel, form toggle, validation, redirect on success
+- `ProtectedRoute` — Route guard with hydration-aware loading state
+- `useAuth` hook — Convenience hook re-exporting auth store state and actions
+- Updated `Header` — User menu with initials circle, name, email, sign-out
+- Updated `TabBar` — Hidden when unauthenticated
+- Updated `App.tsx` — Login route rendered without Layout; protected routes wrapped in ProtectedRoute > Layout
 
 ---
 
@@ -342,21 +378,27 @@ frontend/
 ├── postcss.config.js
 ├── src/
 │   ├── main.tsx                    # React 18 createRoot entry
-│   ├── App.tsx                     # BrowserRouter + lazy-loaded routes
+│   ├── App.tsx                     # BrowserRouter + lazy-loaded routes (updated: auth routes)
 │   ├── index.css                   # Tailwind directives + custom styles
-│   ├── types/index.ts              # All TypeScript interfaces & types
+│   ├── types/
+│   │   ├── index.ts                # All TypeScript interfaces & types
+│   │   └── auth.ts                 # Auth-specific types (User, LoginCredentials, RegisterData)
 │   ├── api/mock.ts                 # localStorage-backed mock API
-│   ├── store/index.ts              # Zustand state management
+│   ├── store/
+│   │   ├── index.ts                # Zustand state management
+│   │   └── authStore.ts            # Auth state with persist middleware
 │   ├── hooks/
 │   │   ├── useItems.ts             # CRUD, search, group-by-type
 │   │   ├── useCategories.ts        # Category management
-│   │   └── useTheme.ts             # Dark/light/system theme
+│   │   ├── useTheme.ts             # Dark/light/system theme
+│   │   └── useAuth.ts              # Convenience hook for auth store
 │   ├── components/
 │   │   ├── ui/                     # Button, Input, Badge, Modal, Select,
 │   │   │                           # Textarea, Toggle, Card, EmptyState,
 │   │   │                           # ConfirmDialog
-│   │   ├── layout/                 # Header (theme toggle, nav), TabBar (mobile),
-│   │   │                           # Layout wrapper
+│   │   ├── layout/                 # Header (theme toggle, nav, user menu), TabBar (mobile),
+│   │   │                           # Layout wrapper (updated: auth-aware Header + TabBar)
+│   │   ├── auth/                   # ProtectedRoute (auth guard, hydration-aware)
 │   │   ├── items/                  # ItemCard (expandable, type-aware),
 │   │   │                           # ItemForm (dynamic fields per type),
 │   │   │                           # ItemList (grouped by type)
@@ -370,12 +412,17 @@ frontend/
 │       ├── ProcessPage.tsx         # Active items, Complete → Memo
 │       ├── MemoPage.tsx            # Archive with cards/table toggle,
 │       │                           # IT Infra view, search + filters
-│       └── ItemFormPage.tsx        # Create/edit items, dynamic type fields
+│       ├── ItemFormPage.tsx        # Create/edit items, dynamic type fields
+│       └── LoginPage.tsx           # Full-page login/register with branding panel
 ```
 
 ### Frontend Features Implemented
 
 - [x] React 18 + TypeScript + Vite + Tailwind CSS
+- [x] Authentication system (login, register, logout)
+- [x] Route protection with auth guard
+- [x] Password strength indicator
+- [x] Persistent sessions via localStorage
 - [x] Todo → Process → Memo lifecycle with status transitions
 - [x] All 6 item types with dynamic create/edit forms
 - [x] Tab-based navigation (mobile bottom bar, desktop top nav)
@@ -403,7 +450,6 @@ frontend/
 - [ ] Swipe actions on list items
 - [ ] Kanban view
 - [ ] Drag & drop reordering
-- [ ] Backend API integration (mock only)
 - [ ] Reading progress tracking
 - [ ] Export to PDF/Markdown
 
@@ -504,7 +550,7 @@ backend/
 
 ### Phase 5: Integration & Deployment
 - [ ] Wire frontend to real backend (replace mock API)
-- [ ] Authentication / user accounts
+- [x] Authentication / user accounts (frontend implemented)
 - [ ] Cloud sync / multi-device support
 - [ ] Production deployment
 - [ ] Data export (PDF / Markdown / CSV / JSON)
