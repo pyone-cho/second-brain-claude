@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -X PATCH http://localhost:3001/api/items/cfcfe5f0-438b-476b-8c47-b4135e84fd80/status -H 'Content-Type: application/json' -d '{\"status\":\"memo\"}')",
+      "Bash(curl -s -X PATCH http://localhost:3001/api/items/d94392b2-c1f0-45a6-8ede-7602ce56efc4/status -H 'Content-Type: application/json' -d '{\"status\":\"memo\"}')",
+      "Bash(curl -s \"http://localhost:3001/api/search?q=postgres\")",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -s \"http://localhost:3001/api/search?q=clean%20code\")",
+      "Bash(curl -s \"http://localhost:3001/api/search?q=SOLID\")",
+      "Bash(curl -s \"http://localhost:3001/api/search?q=tokyo\")",
+      "Bash(curl -s \"http://localhost:3001/api/search?q=bug&status=memo\")",
+      "Bash(curl -s \"http://localhost:3001/api/search?q=tokyo&status=todo\")",
+      "Bash(curl -s -X POST http://localhost:3001/api/items -H 'Content-Type: application/json' -d '{}')",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s -X POST http://localhost:3001/api/items -H 'Content-Type: application/json' -d '{\"type\":\"invalid\"}')",
+      "Bash(curl -s http://localhost:3001/api/items/00000000-0000-0000-0000-000000000000)",
+      "Bash(curl -s -X POST http://localhost:3001/api/categories -H 'Content-Type: application/json' -d '{}')",
+      "Bash(curl -s -X PUT http://localhost:3001/api/categories/999 -H 'Content-Type: application/json' -d '{\"name\":\"New\"}')",
+      "Bash(curl -s -X PATCH http://localhost:3001/api/items/00000000-0000-0000-0000-000000000000/status -H 'Content-Type: application/json' -d '{\"status\":\"memo\"}')",
+      "Bash(curl -s \"http://localhost:3001/api/items\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f'All items: {len\\(d[\\\\\"data\\\\\"]\\)}'\\)\")",
+      "Bash(curl -s http://localhost:3001/api/nonexistent)",
+      "Bash(curl -s -X POST http://localhost:3001/api/items -H 'Content-Type: application/json' -d '{\"type\":\"reading-website\",\"title\":\"API Design Guide\",\"url\":\"https://example.com/api-design\",\"priority\":\"medium\",\"website_name\":\"Example Blog\",\"knowledge\":\"REST best practices\",\"tags\":[\"api\",\"reference\"]}')"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "dart-mcp"
+  ],
+  "enableAllProjectMcpServers": true
+}
