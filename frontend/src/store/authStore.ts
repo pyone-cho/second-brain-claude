@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User } from '@/types/auth';
+import { useAppStore } from './index';
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -17,6 +18,20 @@ function mockJwtToken(userId: string): string {
     Math.floor(Math.random() * 16).toString(16)
   ).join('');
   return `${header}.${payload}.${signature}`;
+}
+
+/**
+ * Simple hash for mock password storage.
+ * NOT cryptographically secure — for demo purposes only.
+ */
+function hashPassword(password: string): string {
+  let hash = 0;
+  for (let i = 0; i < password.length; i++) {
+    const char = password.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return `mock-${Math.abs(hash).toString(36)}`;
 }
 
 function validateEmail(email: string): string | null {
@@ -45,6 +60,8 @@ interface AuthStore {
   token: string | null;
   isLoading: boolean;
   error: string | null;
+  // Stored password hash for mock validation (persisted in localStorage)
+  _passwordHash: string | null;
 
   // Computed (via get)
   isAuthenticated: () => boolean;
@@ -69,6 +86,7 @@ export const useAuthStore = create<AuthStore>()(
       token: null,
       isLoading: false,
       error: null,
+      _passwordHash: null,
 
       isAuthenticated: () => {
         const state = get();
@@ -91,6 +109,20 @@ export const useAuthStore = create<AuthStore>()(
           if (passwordError) {
             set({ isLoading: false, error: passwordError });
             return { success: false, error: passwordError };
+          }
+
+          // Check if password matches stored hash
+          const state = get();
+          const inputHash = hashPassword(password);
+          if (state._passwordHash && state.user?.email === email.trim().toLowerCase()) {
+            if (inputHash !== state._passwordHash) {
+              set({ isLoading: false, error: 'Invalid email or password' });
+              return { success: false, error: 'Invalid email or password' };
+            }
+          } else if (state._passwordHash && state.user?.email !== email.trim().toLowerCase()) {
+            // Different email — require registration first
+            set({ isLoading: false, error: 'Invalid email or password' });
+            return { success: false, error: 'Invalid email or password' };
           }
 
           const trimmedEmail = email.trim().toLowerCase();
@@ -151,8 +183,9 @@ export const useAuthStore = create<AuthStore>()(
           };
 
           const token = mockJwtToken(user.id);
+          const passwordHash = hashPassword(password);
 
-          set({ user, token, isLoading: false, error: null });
+          set({ user, token, _passwordHash: passwordHash, isLoading: false, error: null });
           return { success: true };
         } catch (err) {
           const message =
@@ -163,7 +196,20 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       logout: () => {
-        set({ user: null, token: null, isLoading: false, error: null });
+        set({ user: null, token: null, _passwordHash: null, isLoading: false, error: null });
+        // Clear app data to prevent data leakage between users
+        useAppStore.setState({
+          items: [],
+          categories: [
+            { id: 'cat-1', name: 'Work', color: '#3b82f6', icon: 'briefcase', createdAt: new Date().toISOString() },
+            { id: 'cat-2', name: 'Personal', color: '#10b981', icon: 'user', createdAt: new Date().toISOString() },
+            { id: 'cat-3', name: 'Learning', color: '#f59e0b', icon: 'book-open', createdAt: new Date().toISOString() },
+            { id: 'cat-4', name: 'Health', color: '#ef4444', icon: 'heart', createdAt: new Date().toISOString() },
+            { id: 'cat-5', name: 'Finance', color: '#8b5cf6', icon: 'dollar-sign', createdAt: new Date().toISOString() },
+            { id: 'cat-6', name: 'Home', color: '#ec4899', icon: 'home', createdAt: new Date().toISOString() },
+            { id: 'cat-7', name: 'Travel', color: '#06b6d4', icon: 'map', createdAt: new Date().toISOString() },
+          ],
+        });
       },
 
       clearError: () => {
@@ -176,6 +222,7 @@ export const useAuthStore = create<AuthStore>()(
       partialize: (state) => ({
         user: state.user,
         token: state.token,
+        _passwordHash: state._passwordHash,
       }),
     }
   )
