@@ -53,7 +53,7 @@ export function TabBar() {
   const { isAuthenticated } = useAuth();
 
   // Hide tab bar entirely if the user is not authenticated
-  if (!isAuthenticated()) {
+  if (!isAuthenticated) {
     return null;
   }
 

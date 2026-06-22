@@ -3,20 +3,13 @@ import { Link } from 'react-router-dom';
 import { fetchStats } from '@/api/mock';
 import { useItems } from '@/hooks/useItems';
 import type { AppStats } from '@/types';
+import { TYPE_SHORT_LABELS } from '@/constants';
+import { getItemTitle } from '@/utils/item';
 import { StatsCard } from '@/components/dashboard/StatsCard';
 import { QuickAdd } from '@/components/dashboard/QuickAdd';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { format } from 'date-fns';
-
-const typeShortLabels: Record<string, string> = {
-  task: 'Task',
-  'task-it-infra': 'IT',
-  'reading-book': 'Book',
-  'reading-website': 'Web',
-  buying: 'Buy',
-  trip: 'Trip',
-};
 
 export function DashboardPage() {
   const [stats, setStats] = useState<AppStats | null>(null);
@@ -146,41 +139,21 @@ export function DashboardPage() {
               </p>
             ) : (
               <div className="space-y-1">
-                {recent.map((item) => {
-                  const todo = (item as any).todo;
-                  const title = (() => {
-                    switch (item.type) {
-                      case 'task':
-                      case 'task-it-infra':
-                        return todo?.name || 'Untitled';
-                      case 'reading-book':
-                        return todo?.title || 'Untitled';
-                      case 'reading-website':
-                        return todo?.title || 'Untitled';
-                      case 'buying':
-                        return todo?.category || 'Purchase';
-                      case 'trip':
-                        return todo?.destination || 'Untitled';
-                      default:
-                        return 'Untitled';
-                    }
-                  })();
-                  return (
+                {recent.map((item) => (
                     <Link
                       key={item.id}
                       to={`/items/${item.id}/edit`}
                       className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                                                <Badge variant={item.type} size="sm">{typeShortLabels[item.type] || item.type}</Badge>
-                        <span className="text-sm text-slate-700 dark:text-slate-300 truncate">{title}</span>
+                        <Badge variant={item.type} size="sm">{TYPE_SHORT_LABELS[item.type] || item.type}</Badge>
+                        <span className="text-sm text-slate-700 dark:text-slate-300 truncate">{getItemTitle(item)}</span>
                       </div>
                       <span className="text-xs text-slate-400 dark:text-slate-500 shrink-0">
                         {format(new Date(item.updatedAt), 'MMM d')}
                       </span>
                     </Link>
-                  );
-                })}
+                  ))}
               </div>
             )}
           </Card>

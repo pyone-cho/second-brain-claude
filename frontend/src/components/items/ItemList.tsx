@@ -1,4 +1,5 @@
 import type { AnyItem, ItemStatus, ItemType } from '@/types';
+import { TYPE_DISPLAY_NAMES } from '@/constants';
 import { ItemCard } from './ItemCard';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Badge } from '@/components/ui/Badge';
@@ -11,15 +12,6 @@ interface ItemListProps {
   onTogglePin?: (id: string) => void;
   status: ItemStatus;
 }
-
-const typeDisplayNames: Record<ItemType, string> = {
-  task: 'Tasks',
-  'task-it-infra': 'IT Infrastructure',
-  'reading-book': 'Reading (Books)',
-  'reading-website': 'Reading (Websites)',
-  buying: 'Shopping',
-  trip: 'Trips',
-};
 
 const typeOrder: ItemType[] = [
   'task',
@@ -51,7 +43,7 @@ export function ItemList({
           <section key={type}>
             <div className="flex items-center gap-2 mb-3">
               <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
-                {typeDisplayNames[type]}
+                {TYPE_DISPLAY_NAMES[type]}
               </h2>
               <Badge variant={type} size="sm">
                 {group.length}

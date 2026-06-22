@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import clsx from 'clsx';
 import type { AnyItem, ItemStatus } from '@/types';
+import { TYPE_LABELS } from '@/constants';
+import { getItemTitle, getItemSubtitle } from '@/utils/item';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -15,15 +17,6 @@ interface ItemCardProps {
   onTogglePin?: (id: string) => void;
 }
 
-const typeLabels: Record<string, string> = {
-  task: 'Task',
-  'task-it-infra': 'IT Infra',
-  'reading-book': 'Book',
-  'reading-website': 'Website',
-  buying: 'Buy',
-  trip: 'Trip',
-};
-
 export function ItemCard({ item, onMoveStatus, onDelete, onTogglePin }: ItemCardProps) {
   const navigate = useNavigate();
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -34,46 +27,8 @@ export function ItemCard({ item, onMoveStatus, onDelete, onTogglePin }: ItemCard
     setConfirmDelete(false);
   }, [item.id, onDelete]);
 
-  const todo = 'todo' in item ? (item as any).todo : null;
-  const processMemo = 'processMemo' in item ? (item as any).processMemo : null;
-
-  const getTitle = (): string => {
-    if (!todo) return item.id;
-    switch (item.type) {
-      case 'task':
-      case 'task-it-infra':
-        return todo.name || 'Untitled Task';
-      case 'reading-book':
-        return todo.title || 'Untitled Book';
-      case 'reading-website':
-        return todo.title || 'Untitled Website';
-      case 'buying':
-        return todo.category || 'Purchase';
-      case 'trip':
-        return todo.destination || 'Untitled Trip';
-      default:
-        return 'Untitled';
-    }
-  };
-
-  const getSubtitle = (): string | null => {
-    if (!todo) return null;
-    switch (item.type) {
-      case 'task':
-      case 'task-it-infra':
-        return todo.category || null;
-      case 'reading-book':
-        return todo.author ? `by ${todo.author}` : null;
-      case 'reading-website':
-        return todo.url || null;
-      case 'buying':
-        return todo.price ? `$${todo.price}` : null;
-      case 'trip':
-        return todo.date || null;
-      default:
-        return null;
-    }
-  };
+  const title = getItemTitle(item);
+  const subtitle = getItemSubtitle(item);
 
   return (
     <>
@@ -96,20 +51,20 @@ export function ItemCard({ item, onMoveStatus, onDelete, onTogglePin }: ItemCard
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap mb-1">
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-                  {getTitle()}
+                  {title}
                 </h3>
                 <Badge variant={item.type} size="sm">
-                  {typeLabels[item.type] || item.type}
+                  {TYPE_LABELS[item.type] || item.type}
                 </Badge>
-                {todo?.priority && (
-                  <Badge variant={todo.priority} size="sm" dot>
-                    {todo.priority}
+                {item.todo?.priority && (
+                  <Badge variant={item.todo.priority} size="sm" dot>
+                    {item.todo.priority}
                   </Badge>
                 )}
               </div>
-              {getSubtitle() && (
+              {subtitle && (
                 <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                  {getSubtitle()}
+                  {subtitle}
                 </p>
               )}
             </div>
@@ -182,7 +137,7 @@ export function ItemCard({ item, onMoveStatus, onDelete, onTogglePin }: ItemCard
           )}
         </div>
 
-        {isExpanded && processMemo && (
+        {isExpanded && (
           <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
             <ExpandedContent item={item} />
           </div>
@@ -194,7 +149,7 @@ export function ItemCard({ item, onMoveStatus, onDelete, onTogglePin }: ItemCard
         onClose={() => setConfirmDelete(false)}
         onConfirm={handleDelete}
         title="Delete Item"
-        message={`Are you sure you want to delete "${getTitle()}"? This action cannot be undone.`}
+        message={`Are you sure you want to delete "${title}"? This action cannot be undone.`}
         confirmLabel="Delete"
         variant="danger"
       />

@@ -4,20 +4,22 @@ import type { AnyItem, ItemStatus, ItemType, SearchFilters } from '@/types';
 
 export function useItems(status: ItemStatus) {
   const items = useAppStore((s) => s.items);
-  const getItemsByStatus = useAppStore((s) => s.getItemsByStatus);
-  const getItemsByType = useAppStore((s) => s.getItemsByType);
-  const getItemById = useAppStore((s) => s.getItemById);
   const addItem = useAppStore((s) => s.addItem);
   const updateItem = useAppStore((s) => s.updateItem);
   const deleteItem = useAppStore((s) => s.deleteItem);
   const moveItemStatus = useAppStore((s) => s.moveItemStatus);
   const togglePin = useAppStore((s) => s.togglePin);
 
-  const filtered = useMemo(() => getItemsByStatus(status), [items, status, getItemsByStatus]);
+  const filtered = useMemo(
+    () => items
+      .filter((it) => it.status === status)
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
+    [items, status]
+  );
 
   const ofType = useCallback(
-    (type: ItemType) => getItemsByType(status, type),
-    [items, status, getItemsByType]
+    (type: ItemType) => filtered.filter((it) => it.type === type),
+    [filtered]
   );
 
   const groupedByType = useMemo(() => {
@@ -57,7 +59,7 @@ export function useItems(status: ItemStatus) {
     items: filtered,
     groupedByType,
     ofType,
-    getItemById,
+    getItemById: useAppStore.getState().getItemById,
     createItem,
     updateItem,
     deleteItem,

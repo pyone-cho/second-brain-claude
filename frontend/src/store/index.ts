@@ -245,6 +245,16 @@ export const useAppStore = create<AppState>()(
     {
       name: 'second-brain-storage',
       version: 1,
+      partialize: (state) => ({
+        ...state,
+        items: state.items.map((item) => {
+          if (item.type === 'task-it-infra') {
+            const { password, new_password, ...rest } = item.processMemo;
+            return { ...item, processMemo: rest } as AnyItem;
+          }
+          return item;
+        }),
+      }),
     }
   )
 );

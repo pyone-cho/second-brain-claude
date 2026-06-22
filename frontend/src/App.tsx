@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { useTheme } from '@/hooks/useTheme';
 import { Layout } from '@/components/layout/Layout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 
 const DashboardPage = lazy(() =>
   import('@/pages/DashboardPage').then((m) => ({ default: m.DashboardPage }))
@@ -39,8 +40,9 @@ export function App() {
 
   return (
     <BrowserRouter>
-      <Suspense fallback={<PageFallback />}>
-        <Routes>
+      <ErrorBoundary>
+        <Suspense fallback={<PageFallback />}>
+          <Routes>
           {/* Login page — no Layout wrapper, full-page standalone */}
           <Route path="/login" element={<LoginPage />} />
 
@@ -64,8 +66,9 @@ export function App() {
               </ProtectedRoute>
             }
           />
-        </Routes>
-      </Suspense>
+          </Routes>
+        </Suspense>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }

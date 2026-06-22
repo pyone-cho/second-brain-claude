@@ -134,7 +134,7 @@ export function ITInfraTable({ items, onTogglePin, onEdit, onDelete }: ITInfraTa
                     </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <Badge variant={pm.infra as any} size="sm">
+                    <Badge variant={pm.infra} size="sm">
                       {infraLabels[pm.infra] || pm.infra || '—'}
                     </Badge>
                   </td>

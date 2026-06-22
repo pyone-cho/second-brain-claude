@@ -5,7 +5,7 @@ export function useAuth() {
   const token = useAuthStore((s) => s.token);
   const isLoading = useAuthStore((s) => s.isLoading);
   const error = useAuthStore((s) => s.error);
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isAuth = useAuthStore((s) => s.token !== null && s.user !== null);
   const login = useAuthStore((s) => s.login);
   const register = useAuthStore((s) => s.register);
   const logout = useAuthStore((s) => s.logout);
@@ -14,7 +14,7 @@ export function useAuth() {
   return {
     user,
     token,
-    isAuthenticated,
+    isAuthenticated: isAuth,
     isLoading,
     error,
     login,

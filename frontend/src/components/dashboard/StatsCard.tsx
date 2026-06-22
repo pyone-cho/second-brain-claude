@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 import { Card } from '@/components/ui/Card';
 
@@ -62,7 +63,7 @@ export function StatsCard({ label, value, icon, color = 'blue', href }: StatsCar
   );
 
   if (href) {
-    return <a href={href}>{content}</a>;
+    return <Link to={href}>{content}</Link>;
   }
 
   return content;

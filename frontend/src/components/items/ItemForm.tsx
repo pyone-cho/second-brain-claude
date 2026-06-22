@@ -52,6 +52,7 @@ export function ItemForm({ initialItem, onSubmit, onCancel, isSubmitting }: Item
     });
   }, []);
 
+  /* eslint-disable @typescript-eslint/no-explicit-any */
   const updateTodo = useCallback((field: string, value: any) => {
     setItem((prev) => {
       const updated = { ...prev } as any;

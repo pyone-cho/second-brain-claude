@@ -2,8 +2,9 @@ import { useState, useMemo } from 'react';
 import { format } from 'date-fns';
 import clsx from 'clsx';
 import type { AnyItem } from '@/types';
+import { TYPE_LABELS } from '@/constants';
+import { getItemTitle } from '@/utils/item';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 
 interface MemoTableProps {
@@ -15,35 +16,6 @@ interface MemoTableProps {
 
 type SortField = 'updatedAt' | 'type' | 'title';
 type SortDir = 'asc' | 'desc';
-
-const typeLabels: Record<string, string> = {
-  task: 'Task',
-  'task-it-infra': 'IT Infra',
-  'reading-book': 'Book',
-  'reading-website': 'Website',
-  buying: 'Buy',
-  trip: 'Trip',
-};
-
-function getItemTitle(item: AnyItem): string {
-  const todo = (item as any).todo;
-  if (!todo) return item.id;
-  switch (item.type) {
-    case 'task':
-    case 'task-it-infra':
-      return todo.name || 'Untitled';
-    case 'reading-book':
-      return todo.title || 'Untitled';
-    case 'reading-website':
-      return todo.title || 'Untitled';
-    case 'buying':
-      return todo.category || 'Purchase';
-    case 'trip':
-      return todo.destination || 'Untitled';
-    default:
-      return 'Untitled';
-  }
-}
 
 export function MemoTable({ items, onTogglePin, onDelete, onEdit }: MemoTableProps) {
   const [sortField, setSortField] = useState<SortField>('updatedAt');
@@ -167,7 +139,7 @@ export function MemoTable({ items, onTogglePin, onDelete, onEdit }: MemoTablePro
                   )}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">
-                  <Badge variant={item.type} size="sm">{typeLabels[item.type] || item.type}</Badge>
+                  <Badge variant={item.type} size="sm">{TYPE_LABELS[item.type] || item.type}</Badge>
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
                   {format(new Date(item.updatedAt), 'MMM d, yyyy')}
@@ -219,40 +191,37 @@ export function MemoTable({ items, onTogglePin, onDelete, onEdit }: MemoTablePro
 }
 
 function MemoExpandedRow({ item }: { item: AnyItem }) {
-  const pm = (item as any).processMemo;
-  if (!pm) return <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">No details.</p>;
-
   switch (item.type) {
     case 'task':
       return (
         <div className="mt-3 pl-6 space-y-1.5 pb-2">
-          {pm.problem && <DetailLine label="Problem" value={pm.problem} />}
-          {pm.experience && <DetailLine label="Experience" value={pm.experience} />}
-          {pm.note && <DetailLine label="Note" value={pm.note} />}
+          {item.processMemo.problem && <DetailLine label="Problem" value={item.processMemo.problem} />}
+          {item.processMemo.experience && <DetailLine label="Experience" value={item.processMemo.experience} />}
+          {item.processMemo.note && <DetailLine label="Note" value={item.processMemo.note} />}
         </div>
       );
     case 'task-it-infra':
       return (
         <div className="mt-3 pl-6 space-y-1.5 pb-2">
-          {pm.infra && <DetailLine label="Infra" value={pm.infra} />}
-          {pm.item && <DetailLine label="Item" value={pm.item} />}
-          {pm.url_ip && <DetailLine label="URL/IP" value={pm.url_ip} />}
-          {pm.username && <DetailLine label="Username" value={pm.username} />}
-          {pm.remark && <DetailLine label="Remark" value={pm.remark} />}
+          {item.processMemo.infra && <DetailLine label="Infra" value={item.processMemo.infra} />}
+          {item.processMemo.item && <DetailLine label="Item" value={item.processMemo.item} />}
+          {item.processMemo.url_ip && <DetailLine label="URL/IP" value={item.processMemo.url_ip} />}
+          {item.processMemo.username && <DetailLine label="Username" value={item.processMemo.username} />}
+          {item.processMemo.remark && <DetailLine label="Remark" value={item.processMemo.remark} />}
         </div>
       );
     case 'reading-book':
       return (
         <div className="mt-3 pl-6 space-y-1.5 pb-2">
-          {pm.knowledge && <DetailLine label="Knowledge" value={pm.knowledge} />}
-          {pm.note && <DetailLine label="Notes" value={pm.note} />}
+          {item.processMemo.knowledge && <DetailLine label="Knowledge" value={item.processMemo.knowledge} />}
+          {item.processMemo.note && <DetailLine label="Notes" value={item.processMemo.note} />}
         </div>
       );
     case 'reading-website':
       return (
         <div className="mt-3 pl-6 space-y-1.5 pb-2">
-          {pm.knowledge && <DetailLine label="Knowledge" value={pm.knowledge} />}
-          {pm.note && <DetailLine label="Notes" value={pm.note} />}
+          {item.processMemo.knowledge && <DetailLine label="Knowledge" value={item.processMemo.knowledge} />}
+          {item.processMemo.note && <DetailLine label="Notes" value={item.processMemo.note} />}
         </div>
       );
     default:
