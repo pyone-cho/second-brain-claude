@@ -111,12 +111,13 @@ The web frontend includes a complete authentication system with login, registrat
 - State: `user`, `token`, `isLoading`, `error`
 - Actions: `login()`, `register()`, `logout()`, `clearError()`
 - `isAuthenticated()` getter checks token and user existence
+- Logout clears both auth store and app store (items, categories) to prevent data leakage
 
 ### Components
 - `LoginPage` — Full-page login/register with branding panel, form toggle, validation, redirect on success
-- `ProtectedRoute` — Route guard with hydration-aware loading state
+- `ProtectedRoute` — Route guard with hydration-aware loading state, uses boolean selector for proper re-renders
 - `useAuth` hook — Convenience hook re-exporting auth store state and actions
-- Updated `Header` — User menu with initials circle, name, email, sign-out
+- Updated `Header` — User menu with initials circle, name, email, sign-out (clears app data on logout)
 - Updated `TabBar` — Hidden when unauthenticated
 - Updated `App.tsx` — Login route rendered without Layout; protected routes wrapped in ProtectedRoute > Layout
 
@@ -303,7 +304,7 @@ CREATE TABLE item_tags (
 
 Base path: `/api`
 
-All responses are JSON with proper `Content-Type: application/json` headers. CORS is enabled for `http://localhost:5173` (the Vite dev server). Every request is logged with `[timestamp] METHOD /path STATUS duration` format. All database queries use parameterized SQL (no SQL injection). Item mutations run inside transactions (items table + detail table + tags). Invalid types or statuses return `400` with allowed values. Non-existent resources return `404`. The server runs on `PORT` env var or default `3001`.
+All responses are JSON with proper `Content-Type: application/json` headers. CORS is configurable via `CORS_ORIGIN` environment variable (defaults to `http://localhost:5173`). Every request is logged with `[timestamp] METHOD /path STATUS duration` format. All database queries use parameterized SQL (no SQL injection). Item mutations run inside transactions (items table + detail table + tags). Invalid types or statuses return `400` with allowed values. Non-existent resources return `404`. The server runs on `PORT` env var or default `3001`. Password fields are encrypted at rest using AES-256-GCM and redacted from API responses.
 
 ### Items
 
@@ -330,13 +331,13 @@ All responses are JSON with proper `Content-Type: application/json` headers. COR
 | Method | Path | Description | Query | Response |
 |--------|------|-------------|-------|----------|
 | `GET` | `/api/it-infra` | List IT infra items filtered by infra type | `?infra=server\|network\|cloud` | IT infra `FullItem[]` |
-| `GET` | `/api/it-infra/search` | Search IT infra items by IP, item name, infra, kind, or description | `?q=<search_term>` | IT infra `FullItem[]` matching the search term |
+| `GET` | `/api/it-infra/search` | Search IT infra items by IP, item name, infra, kind, or description | `?q=<search_term>` (LIKE metacharacters escaped) | IT infra `FullItem[]` matching the search term |
 
 ### Search & Stats
 
 | Method | Path | Description | Query | Response |
 |--------|------|-------------|-------|----------|
-| `GET` | `/api/search` | Weighted full-text search across memo items | `?q=<keyword>&type=<filter>&status=<filter>&category=<id>&dateFrom=<ISO>&dateTo=<ISO>&pinned=<bool>` | Scored `FullItem[]` ordered by relevance |
+| `GET` | `/api/search` | Weighted full-text search across memo items | `?q=<keyword>&type=<filter>&status=<filter>&category=<id>&dateFrom=<ISO>&dateTo=<ISO>&pinned=<bool>&limit=<num>&offset=<num>` | `{ data: Scored FullItem[], total: number, hasMore: boolean }` |
 | `GET` | `/api/stats` | Aggregate statistics for the dashboard | — | `{ totalTodo, totalProcess, totalMemo, byType: { ... }, booksToRead, upcomingTrips }` |
 
 ### Health
@@ -362,6 +363,8 @@ All endpoints return errors in a consistent format:
 - `400` — Bad request (invalid type, status, or missing required fields)
 - `404` — Not found (item or category does not exist)
 - `500` — Internal server error (unexpected failure, caught by global error handler)
+
+Note: The error handler properly propagates `AppError.statusCode`, so validation errors return 400 and not-found errors return 404 as expected.
 
 ---
 
@@ -430,7 +433,7 @@ frontend/
 - [x] Dark mode (light / dark / system preference)
 - [x] Card grid view with grouped-by-type layout
 - [x] Sortable Memo table with expandable detail rows
-- [x] Dedicated IT Infra table (Item, Infra, Kind, URL/IP, Date columns)
+- [x] Dedicated IT Infra table (Item, Infra, Kind, URL/IP, Date columns — passwords redacted)
 - [x] Card Grid / Table view toggle on Memo page
 - [x] Search with type, category, date range, and pinned filters
 - [x] Pin/favorite items (amber highlight)
@@ -476,8 +479,11 @@ backend/
 │   │   ├── item.ts              # Multi-table JOIN queries, create/update/delete with transactions
 │   │   ├── category.ts          # Category CRUD operations
 │   │   └── search.ts            # Weighted search across text fields
+│   ├── utils/
+│   │   ├── crypto.ts            # AES-256-GCM encryption/decryption for password fields
+│   │   └── itemFields.ts        # Shared field definitions, tag fetching, column flattening
 │   └── middleware/
-│       ├── errorHandler.ts      # Global error handler + AppError class
+│       ├── errorHandler.ts      # Global error handler + AppError class (respects statusCode)
 │       └── validate.ts          # Type/status/priority/infra/ID validators
 ```
 
@@ -492,10 +498,17 @@ backend/
 - [x] Stats aggregation endpoint (counts by status, counts by type, books to read, upcoming trips)
 - [x] Transaction-based mutations — item create/update wraps items table + detail table + tags in a single transaction
 - [x] Input validation on all endpoints — invalid types/statuses return 400 with allowed values
-- [x] CORS enabled for Vite dev server (http://localhost:5173)
+- [x] CORS configurable via `CORS_ORIGIN` env variable (defaults to `http://localhost:5173`)
 - [x] Request logging with timestamp, method, path, status code, and duration
-- [x] Global error handler with consistent JSON error response format
+- [x] Global error handler with proper `AppError.statusCode` propagation
 - [x] Parameterized SQL queries throughout (no SQL injection)
+- [x] Password encryption at rest using AES-256-GCM (`ENCRYPTION_KEY` env variable)
+- [x] Password fields redacted from API responses (use dedicated credentials endpoint for on-demand retrieval)
+- [x] LIKE injection prevention — metacharacters escaped in search queries
+- [x] Search pagination support (`limit`/`offset` params, returns `total` and `hasMore`)
+- [x] Request body size limit (1MB)
+- [x] Orphaned tag cleanup on item update
+- [x] Code deduplication — shared utilities in `src/utils/` (itemFields, crypto)
 
 ---
 

@@ -88,7 +88,7 @@ The system supports six distinct item types, each with specialized fields at eac
 - Dynamic forms — fields adapt to item type (task, book, website, purchase, trip, IT infra)
 - Card grid view — items grouped by type with color-coded categories
 - Sortable Memo table — expandable detail rows with column sorting
-- Dedicated IT Infra table — columns for Item, Infra, Kind, URL/IP, Date, and credentials
+- Dedicated IT Infra table — columns for Item, Infra, Kind, URL/IP, Date (passwords redacted for security)
 - Card Grid / Table view toggle on the Memo page
 - Full-text search with type, category, date range, and pinned filters
 - Pin/favorite items with amber highlight
@@ -107,14 +107,19 @@ The system supports six distinct item types, each with specialized fields at eac
 - WAL mode enabled for concurrent read performance
 - Full CRUD for items and categories
 - IT Infra-specific endpoints with search by IP, item name, infra type, kind, and description
-- Weighted full-text search across memo items
+- Weighted full-text search across memo items with pagination support
 - Stats aggregation endpoint (counts by status and type, books to read, upcoming trips)
 - Transaction-based mutations — item create/update wraps items table + detail table + tags in a single transaction
 - Input validation on all endpoints with descriptive 400 error responses
-- CORS configured for the Vite dev server (`http://localhost:5173`)
+- CORS configurable via `CORS_ORIGIN` environment variable
 - Request logging — `[timestamp] METHOD /path STATUS duration`
 - Parameterized SQL queries throughout (no SQL injection)
-- Global error handler with consistent error response format
+- Global error handler with proper HTTP status codes
+- Password encryption at rest using AES-256-GCM
+- Password fields redacted from API responses
+- LIKE injection prevention in search queries
+- Request body size limit (1MB)
+- Orphaned tag cleanup on item update
 
 ---
 
@@ -213,12 +218,15 @@ second-brain-claude/
         │   ├── items.ts              # CRUD + status change endpoints with validation
         │   ├── categories.ts         # Category CRUD endpoints
         │   ├── itInfra.ts            # IT infra listing + search endpoints
-        │   ├── search.ts             # Full-text search with scoring
+        │   ├── search.ts             # Full-text search with scoring and pagination
         │   └── stats.ts              # Aggregate statistics endpoint
         ├── models/
         │   ├── item.ts               # Multi-table JOINs, create/update/delete with transactions
         │   ├── category.ts           # Category CRUD operations
         │   └── search.ts             # Weighted search across text fields
+        ├── utils/
+        │   ├── crypto.ts             # AES-256-GCM encryption/decryption for passwords
+        │   └── itemFields.ts         # Shared field definitions, tag fetching, column flattening
         └── middleware/
             ├── errorHandler.ts       # Global error handler + AppError class
             └── validate.ts           # Type, status, priority, infra, ID validators
@@ -243,6 +251,11 @@ cd second-brain-claude
 # --- Backend ---
 cd backend
 npm install
+
+# Optional: set encryption key for password storage
+# Without it, a random key is generated (passwords won't survive restart)
+export ENCRYPTION_KEY="your-secret-key"
+
 npm run dev
 # Server starts on http://localhost:3001
 # Watches for changes with tsx
@@ -275,7 +288,7 @@ npm start        # Start the compiled server
 
 ## API Endpoints
 
-All endpoints are prefixed with `/api`. Responses are JSON with proper `Content-Type` headers. CORS is enabled for `http://localhost:5173`. Every request is logged with `[timestamp] METHOD /path STATUS duration`.
+All endpoints are prefixed with `/api`. Responses are JSON with proper `Content-Type` headers. CORS is configurable via `CORS_ORIGIN` environment variable (defaults to `http://localhost:5173`). Every request is logged with `[timestamp] METHOD /path STATUS duration`.
 
 ### Items
 
@@ -302,13 +315,13 @@ All endpoints are prefixed with `/api`. Responses are JSON with proper `Content-
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/it-infra` | List IT infra items. Query: `?infra=server\|network\|cloud` |
-| `GET` | `/api/it-infra/search` | Search by IP, item name, infra, kind, or description. Query: `?q=<term>` |
+| `GET` | `/api/it-infra/search` | Search by IP, item name, infra, kind, or description. Query: `?q=<term>` (LIKE metacharacters escaped) |
 
 ### Search & Stats
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/search` | Weighted full-text search. Query: `?q=<keyword>&type=<filter>&status=<filter>&category=<id>&dateFrom=<ISO>&dateTo=<ISO>&pinned=<bool>` |
+| `GET` | `/api/search` | Weighted full-text search. Query: `?q=<keyword>&type=<filter>&status=<filter>&category=<id>&dateFrom=<ISO>&dateTo=<ISO>&pinned=<bool>&limit=<num>&offset=<num>` |
 | `GET` | `/api/stats` | Aggregate statistics. Returns `{ totalTodo, totalProcess, totalMemo, byType, booksToRead, upcomingTrips }` |
 
 ### Health
