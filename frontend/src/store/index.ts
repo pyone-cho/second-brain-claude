@@ -6,6 +6,7 @@ import type {
   ItemStatus,
   ItemType,
 } from '@/types';
+import { fetchItems, fetchCategories } from '@/api/client';
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -49,6 +50,9 @@ interface AppState {
 
   // Theme
   setTheme: (theme: 'light' | 'dark' | 'system') => void;
+
+  // Hydration from backend
+  hydrate: () => Promise<void>;
 
   // Queries
   getItemsByStatus: (status: ItemStatus) => AnyItem[];
@@ -138,6 +142,20 @@ export const useAppStore = create<AppState>()(
       // ── Theme ─────────────────────────────────────────
 
       setTheme: (theme) => set({ theme }),
+
+      // ── Hydration ─────────────────────────────────────
+
+      hydrate: async () => {
+        try {
+          const [items, categories] = await Promise.all([
+            fetchItems(),
+            fetchCategories(),
+          ]);
+          set({ items, categories });
+        } catch (err) {
+          console.error('[hydrate] Failed to fetch from backend:', err);
+        }
+      },
 
       // ── Queries ───────────────────────────────────────
 

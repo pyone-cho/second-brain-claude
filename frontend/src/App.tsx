@@ -1,6 +1,7 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { useTheme } from '@/hooks/useTheme';
+import { useAppStore } from '@/store';
 import { Layout } from '@/components/layout/Layout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
@@ -37,6 +38,10 @@ function PageFallback() {
 
 export function App() {
   useTheme();
+
+  useEffect(() => {
+    useAppStore.getState().hydrate();
+  }, []);
 
   return (
     <BrowserRouter>
