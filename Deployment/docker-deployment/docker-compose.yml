@@ -12,6 +12,7 @@ services:
     environment:
       - PORT=3001
       - NODE_ENV=production
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "sh", "-c", "wget -qO- http://localhost:3001/api/health || exit 1"]

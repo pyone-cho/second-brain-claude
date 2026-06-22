@@ -7,7 +7,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isAuth = useAuthStore((s) => s.token !== null && s.user !== null);
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
@@ -42,7 +42,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     );
   }
 
-  if (!isAuthenticated()) {
+  if (!isAuth) {
     return <Navigate to="/login" replace />;
   }
 
