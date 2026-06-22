@@ -1,6 +1,18 @@
 import db from '../db.js';
-import type { FullItem, ItemTodo, ItemProcessMemo } from './item.js';
 import type { ItemType, ItemStatus } from '../middleware/validate.js';
+import {
+  getTodoFields,
+  getProcessMemoFields,
+  flattenDetailColumns,
+  getTagsForItems,
+} from '../utils/itemFields.js';
+
+/**
+ * Escape SQL LIKE metacharacters to prevent injection and unintended wildcards.
+ */
+function escapeLike(s: string): string {
+  return s.replace(/[%_[]/g, (ch) => `[${ch}]`);
+}
 
 export interface SearchResult {
   id: string;
@@ -15,6 +27,12 @@ export interface SearchResult {
   matchScore: number;
 }
 
+export interface SearchResponse {
+  data: SearchResult[];
+  total: number;
+  hasMore: boolean;
+}
+
 export function searchItems(params: {
   q: string;
   type?: string;
@@ -23,9 +41,14 @@ export function searchItems(params: {
   dateFrom?: string;
   dateTo?: string;
   pinned?: string;
-}): SearchResult[] {
+  limit?: number;
+  offset?: number;
+}): SearchResponse {
   const keyword = params.q.trim();
-  if (!keyword) return [];
+  if (!keyword) return { data: [], total: 0, hasMore: false };
+
+  const limit = Math.min(Math.max(params.limit || 50, 1), 200);
+  const offset = Math.max(params.offset || 0, 0);
 
   // Split into individual search terms for AND matching
   const terms = keyword.split(/\s+/).filter((t) => t.length > 0);
@@ -72,7 +95,7 @@ export function searchItems(params: {
   const searchValues: unknown[] = [];
 
   for (const term of terms) {
-    const pattern = `%${term}%`;
+    const pattern = `%${escapeLike(term)}%`;
 
     // Search in item id
     searchClauses.push('i.id LIKE ?');
@@ -156,13 +179,29 @@ export function searchItems(params: {
   const finalWhere =
     conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : 'WHERE 1=1';
 
+  // Count total matching items (before pagination)
+  const countSql = `
+    SELECT COUNT(*) as total
+    FROM items i
+    LEFT JOIN tasks_ordinary t ON i.id = t.item_id
+    LEFT JOIN tasks_it_infra ti ON i.id = ti.item_id
+    LEFT JOIN readings r ON i.id = r.item_id
+    LEFT JOIN purchases p ON i.id = p.item_id
+    LEFT JOIN trips tr ON i.id = tr.item_id
+    ${finalWhere} AND ${searchWhere}
+  `;
+
+  const allValues = [...values, ...searchValues];
+  const countRow = db.prepare(countSql).get(...allValues) as { total: number };
+  const total = countRow.total;
+
   const sql = `
     SELECT i.id, i.type, i.status, i.created_at, i.updated_at, i.pinned,
       t.category AS t_category, t.name AS t_name, t.due_date AS t_due_date,
       t.priority AS t_priority, t.problem, t.experience, t.note, t.photo,
       ti.category AS ti_category, ti.name AS ti_name, ti.due_date AS ti_due_date,
       ti.priority AS ti_priority, ti.infra, ti.item_name, ti.kind,
-      ti.description, ti.url_ip, ti.username, ti.password, ti.new_password, ti.remark,
+      ti.description, ti.url_ip, ti.username, ti.remark,
       r.source_type, r.title, r.author, r.url, r.priority AS r_priority,
       r.book_name, r.website_name, r.event, r.knowledge, r.note AS r_note,
       r.book_pdf, r.progress,
@@ -179,11 +218,10 @@ export function searchItems(params: {
     LEFT JOIN trips tr ON i.id = tr.item_id
     ${finalWhere} AND ${searchWhere}
     ORDER BY i.updated_at DESC
-    LIMIT 200
+    LIMIT ? OFFSET ?
   `;
 
-  const allValues = [...values, ...searchValues];
-  const rows = db.prepare(sql).all(...allValues) as Record<string, unknown>[];
+  const rows = db.prepare(sql).all(...allValues, limit, offset) as Record<string, unknown>[];
 
   // Get tags for all matching items
   const itemIds = rows.map((r) => r.id as string);
@@ -211,7 +249,7 @@ export function searchItems(params: {
 
   for (const row of rows) {
     const type = row.type as string;
-    const flat = flattenForSearch(row, type);
+    const flat = flattenDetailColumns(row, type);
     const score = computeMatchScore(flat, terms);
 
     // Build todo and processMemo (simplified — reuse the field lists from item model)
@@ -249,81 +287,11 @@ export function searchItems(params: {
   // Sort by matchScore descending
   results.sort((a, b) => b.matchScore - a.matchScore);
 
-  return results;
-}
-
-function getTodoFields(type: string): string[] {
-  switch (type) {
-    case 'task':
-      return ['category', 'name', 'due_date', 'priority', 'problem'];
-    case 'task-it-infra':
-      return ['category', 'name', 'due_date', 'priority'];
-    case 'reading-book':
-    case 'reading-website':
-      return ['source_type', 'title', 'author', 'url', 'priority'];
-    case 'buying':
-      return ['category', 'price', 'priority'];
-    case 'trip':
-      return ['destination', 'companions', 'trip_date', 'duration', 'priority'];
-    default:
-      return [];
-  }
-}
-
-function getProcessMemoFields(type: string): string[] {
-  switch (type) {
-    case 'task':
-      return ['experience', 'note', 'photo'];
-    case 'task-it-infra':
-      return [
-        'category', 'infra', 'item_name', 'kind', 'description',
-        'url_ip', 'username', 'password', 'new_password', 'remark',
-      ];
-    case 'reading-book':
-    case 'reading-website':
-      return ['book_name', 'website_name', 'event', 'knowledge', 'note', 'book_pdf', 'progress'];
-    case 'buying':
-      return ['desired_usability', 'usable_where'];
-    case 'trip':
-      return ['photo_goals', 'experience', 'photo'];
-    default:
-      return [];
-  }
-}
-
-function flattenForSearch(row: Record<string, unknown>, type: string): Record<string, unknown> {
-  const result: Record<string, unknown> = { ...row };
-
-  switch (type) {
-    case 'task':
-      result['category'] = row['t_category'];
-      result['name'] = row['t_name'];
-      result['due_date'] = row['t_due_date'];
-      result['priority'] = row['t_priority'];
-      break;
-    case 'task-it-infra':
-      result['category'] = row['ti_category'];
-      result['name'] = row['ti_name'];
-      result['due_date'] = row['ti_due_date'];
-      result['priority'] = row['ti_priority'];
-      break;
-    case 'reading-book':
-    case 'reading-website':
-      result['priority'] = row['r_priority'];
-      result['note'] = row['r_note'];
-      break;
-    case 'buying':
-      result['category'] = row['p_category'];
-      result['priority'] = row['p_priority'];
-      break;
-    case 'trip':
-      result['priority'] = row['tr_priority'];
-      result['experience'] = row['tr_experience'];
-      result['photo'] = row['tr_photo'];
-      break;
-  }
-
-  return result;
+  return {
+    data: results,
+    total,
+    hasMore: offset + limit < total,
+  };
 }
 
 /**

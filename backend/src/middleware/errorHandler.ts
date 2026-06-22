@@ -12,11 +12,15 @@ export function errorHandler(
 ): void {
   console.error('[ERROR]', err.message, err.stack);
 
+  const statusCode = err instanceof AppError ? err.statusCode : 500;
+
   // Do not leak stack traces in production
   const message =
-    process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message;
+    process.env.NODE_ENV === 'production' && statusCode === 500
+      ? 'Internal server error'
+      : err.message;
 
-  res.status(500).json({ error: message });
+  res.status(statusCode).json({ error: message });
 }
 
 /**

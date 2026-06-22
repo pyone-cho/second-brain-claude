@@ -2,8 +2,16 @@ import { Router } from 'express';
 import { AppError } from '../middleware/errorHandler.js';
 import { getItems } from '../models/item.js';
 import { validateInfraType } from '../middleware/validate.js';
+import { getTagsForItems } from '../utils/itemFields.js';
 import db from '../db.js';
 import type { FullItem } from '../models/item.js';
+
+/**
+ * Escape SQL LIKE metacharacters to prevent injection and unintended wildcards.
+ */
+function escapeLike(s: string): string {
+  return s.replace(/[%_[]/g, (ch) => `[${ch}]`);
+}
 
 const router = Router();
 
@@ -47,7 +55,7 @@ router.get('/search', (req, res, next) => {
       throw new AppError(400, 'Missing required query parameter: q');
     }
 
-    const pattern = `%${q.trim()}%`;
+    const pattern = `%${escapeLike(q.trim())}%`;
 
     const sql = `
       SELECT i.*,
@@ -74,24 +82,7 @@ router.get('/search', (req, res, next) => {
 
     // Fetch tags for these items
     const itemIds = rows.map((r) => r.id as string);
-    const tagsMap = new Map<string, string[]>();
-    if (itemIds.length > 0) {
-      const placeholders = itemIds.map(() => '?').join(',');
-      const tagRows = db
-        .prepare(
-          `SELECT it.item_id, t.name
-           FROM item_tags it
-           JOIN tags t ON t.id = it.tag_id
-           WHERE it.item_id IN (${placeholders})
-           ORDER BY t.name`,
-        )
-        .all(...itemIds) as { item_id: string; name: string }[];
-      for (const tr of tagRows) {
-        const tags = tagsMap.get(tr.item_id) || [];
-        tags.push(tr.name);
-        tagsMap.set(tr.item_id, tags);
-      }
-    }
+    const tagsMap = getTagsForItems(itemIds);
 
     const items = rows.map((row) => ({
       id: row.id,
@@ -115,8 +106,7 @@ router.get('/search', (req, res, next) => {
         description: row.description || undefined,
         url_ip: row.url_ip || undefined,
         username: row.username || undefined,
-        password: row.password || undefined,
-        new_password: row.new_password || undefined,
+        // Passwords are redacted — use /api/it-infra/:id/credentials to retrieve
         remark: row.remark || undefined,
       },
     })) as FullItem[];

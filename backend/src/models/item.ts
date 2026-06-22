@@ -1,6 +1,13 @@
 import { v4 as uuidv4 } from 'uuid';
 import db from '../db.js';
 import type { ItemType, ItemStatus, Priority } from '../middleware/validate.js';
+import { encrypt, isEncrypted } from '../utils/crypto.js';
+import {
+  TODO_FIELDS,
+  PROCESS_MEMO_FIELDS,
+  flattenDetailColumns,
+  getTagsForItems,
+} from '../utils/itemFields.js';
 
 // ---------------------------------------------------------------------------
 // TypeScript interfaces matching the frontend shapes
@@ -113,37 +120,24 @@ export interface FullItem extends BaseItem {
 }
 
 // ---------------------------------------------------------------------------
-// Mapping: which flat table columns go into `todo` vs `processMemo`
+// Password encryption helpers
 // ---------------------------------------------------------------------------
 
-const TODO_FIELDS: Record<string, string[]> = {
-  task: ['category', 'name', 'due_date', 'priority', 'problem'],
-  'task-it-infra': ['category', 'name', 'due_date', 'priority'],
-  'reading-book': ['source_type', 'title', 'author', 'url', 'priority'],
-  'reading-website': ['source_type', 'title', 'author', 'url', 'priority'],
-  buying: ['category', 'price', 'priority'],
-  trip: ['destination', 'companions', 'trip_date', 'duration', 'priority'],
-};
+const ENCRYPTED_FIELDS = ['password', 'new_password'];
 
-const PROCESS_MEMO_FIELDS: Record<string, string[]> = {
-  task: ['experience', 'note', 'photo'],
-  'task-it-infra': [
-    'category',
-    'infra',
-    'item_name',
-    'kind',
-    'description',
-    'url_ip',
-    'username',
-    'password',
-    'new_password',
-    'remark',
-  ],
-  'reading-book': ['book_name', 'website_name', 'event', 'knowledge', 'note', 'book_pdf', 'progress'],
-  'reading-website': ['book_name', 'website_name', 'event', 'knowledge', 'note', 'book_pdf', 'progress'],
-  buying: ['desired_usability', 'usable_where'],
-  trip: ['photo_goals', 'experience', 'photo'],
-};
+/**
+ * Encrypt password fields in a detail-values object before writing to DB.
+ * Skips fields that are already encrypted.
+ */
+function encryptPasswordFields(values: Record<string, unknown>): Record<string, unknown> {
+  const result = { ...values };
+  for (const field of ENCRYPTED_FIELDS) {
+    if (typeof result[field] === 'string' && result[field] && !isEncrypted(result[field] as string)) {
+      result[field] = encrypt(result[field] as string);
+    }
+  }
+  return result;
+}
 
 // ---------------------------------------------------------------------------
 // Table name lookup
@@ -166,33 +160,6 @@ function getDetailTable(type: ItemType): string {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers: fetch tags for a batch of items
-// ---------------------------------------------------------------------------
-
-function getTagsForItems(itemIds: string[]): Map<string, string[]> {
-  if (itemIds.length === 0) return new Map();
-
-  const placeholders = itemIds.map(() => '?').join(',');
-  const rows = db
-    .prepare(
-      `SELECT it.item_id, t.name
-       FROM item_tags it
-       JOIN tags t ON t.id = it.tag_id
-       WHERE it.item_id IN (${placeholders})
-       ORDER BY t.name`,
-    )
-    .all(...itemIds) as { item_id: string; name: string }[];
-
-  const map = new Map<string, string[]>();
-  for (const row of rows) {
-    const tags = map.get(row.item_id) || [];
-    tags.push(row.name);
-    map.set(row.item_id, tags);
-  }
-  return map;
-}
-
-// ---------------------------------------------------------------------------
 // Build a FullItem from a row (result of LEFT JOIN across detail tables)
 // ---------------------------------------------------------------------------
 
@@ -211,6 +178,10 @@ function buildFullItem(row: Record<string, unknown>, tags: string[]): FullItem {
   const processMemo: Record<string, unknown> = {};
   for (const f of memoFields) {
     if (row[f] !== null && row[f] !== undefined) {
+      // Redact password fields from API responses
+      if (ENCRYPTED_FIELDS.includes(f)) {
+        continue;
+      }
       processMemo[f] = row[f];
     }
   }
@@ -282,78 +253,11 @@ export function getItems(params: {
   if (rows.length === 0) return [];
 
   // Collapse conflicting column names into a single row shape per item
-  const flattened = rows.map((row) => flattenDetailColumns(row));
+  const flattened = rows.map((row) => flattenDetailColumns(row, row.type as string));
   const itemIds = flattened.map((r) => r.id as string);
   const tagsMap = getTagsForItems(itemIds);
 
   return flattened.map((row) => buildFullItem(row, tagsMap.get(row.id as string) || []));
-}
-
-/**
- * The LEFT JOIN across 5 tables creates ambiguous column names (e.g. `name`
- * appears in tasks_ordinary, tasks_it_infra, etc.).  We alias them above (t_name,
- * ti_name, etc.).  This function picks the correct alias for the item's type
- * and renames it to the canonical field name so buildFullItem works
- * uniformly.
- */
-function flattenDetailColumns(row: Record<string, unknown>): Record<string, unknown> {
-  const type = row.type as ItemType;
-  const result: Record<string, unknown> = { ...row };
-
-  // Remove all aliased columns, keeping only the ones for this type
-  const toDrop = new Set<string>();
-
-  switch (type) {
-    case 'task':
-      result['category'] = row['t_category'];
-      result['name'] = row['t_name'];
-      result['due_date'] = row['t_due_date'];
-      result['priority'] = row['t_priority'];
-      // Only drop aliased columns (native columns like problem/experience/note/photo are fine)
-      toDrop.add('t_category');
-      toDrop.add('t_name');
-      toDrop.add('t_due_date');
-      toDrop.add('t_priority');
-      break;
-    case 'task-it-infra':
-      result['category'] = row['ti_category'];
-      result['name'] = row['ti_name'];
-      result['due_date'] = row['ti_due_date'];
-      result['priority'] = row['ti_priority'];
-      toDrop.add('ti_category');
-      toDrop.add('ti_name');
-      toDrop.add('ti_due_date');
-      toDrop.add('ti_priority');
-      break;
-    case 'reading-book':
-    case 'reading-website':
-      result['priority'] = row['r_priority'];
-      result['note'] = row['r_note'];
-      toDrop.add('r_priority');
-      toDrop.add('r_note');
-      break;
-    case 'buying':
-      result['category'] = row['p_category'];
-      result['priority'] = row['p_priority'];
-      toDrop.add('p_category');
-      toDrop.add('p_priority');
-      break;
-    case 'trip':
-      result['priority'] = row['tr_priority'];
-      result['experience'] = row['tr_experience'];
-      result['photo'] = row['tr_photo'];
-      toDrop.add('tr_priority');
-      toDrop.add('tr_experience');
-      toDrop.add('tr_photo');
-      break;
-  }
-
-  // Remove the aliased columns we just processed so they don't leak
-  for (const col of toDrop) {
-    delete result[col];
-  }
-
-  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -388,7 +292,7 @@ export function getItemById(id: string): FullItem | null {
   const row = db.prepare(sql).get(id) as Record<string, unknown> | undefined;
   if (!row) return null;
 
-  const flat = flattenDetailColumns(row);
+  const flat = flattenDetailColumns(row, row.type as string);
   const tagsMap = getTagsForItems([id]);
   return buildFullItem(flat, tagsMap.get(id) || []);
 }
@@ -447,7 +351,11 @@ export function createItem(input: CreateItemInput): FullItem {
     if (input[field] !== undefined && input[field] !== null) {
       detailColumns.push(field);
       detailPlaceholders.push('?');
-      detailValues.push(input[field]);
+      // Encrypt password fields before storing
+      const value = ENCRYPTED_FIELDS.includes(field) && typeof input[field] === 'string'
+        ? encrypt(input[field] as string)
+        : input[field];
+      detailValues.push(value);
     }
   }
 
@@ -536,7 +444,11 @@ export function updateItem(id: string, input: UpdateItemInput): FullItem {
   for (const field of allDetailFields) {
     if (input[field] !== undefined) {
       detailUpdates.push(`${field} = ?`);
-      detailValues.push(input[field]);
+      // Encrypt password fields before storing
+      const value = ENCRYPTED_FIELDS.includes(field) && typeof input[field] === 'string'
+        ? encrypt(input[field] as string)
+        : input[field];
+      detailValues.push(value);
     }
   }
 
@@ -579,6 +491,9 @@ export function updateItem(id: string, input: UpdateItemInput): FullItem {
           }
         }
       }
+
+      // Clean up orphaned tags that no longer reference any item
+      db.prepare('DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM item_tags)').run();
     }
   });
 

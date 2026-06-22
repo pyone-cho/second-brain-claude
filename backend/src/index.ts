@@ -15,17 +15,18 @@ const PORT = parseInt(process.env.PORT || '3001', 10);
 // Middleware
 // ---------------------------------------------------------------------------
 
-// CORS for the Vite dev server
+// CORS — configurable via CORS_ORIGIN env var (comma-separated for multiple origins)
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
 app.use(
   cors({
-    origin: 'http://localhost:5173',
+    origin: CORS_ORIGIN,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   }),
 );
 
-// Parse JSON request bodies
-app.use(express.json());
+// Parse JSON request bodies (limit to 1MB)
+app.use(express.json({ limit: '1mb' }));
 
 // Request logger
 app.use((req, res, next) => {
@@ -78,7 +79,7 @@ console.log('[DB] Migrations complete.');
 
 app.listen(PORT, () => {
   console.log(`[Server] Second Brain API running on http://localhost:${PORT}`);
-  console.log(`[Server] CORS enabled for http://localhost:5173`);
+  console.log(`[Server] CORS enabled for ${CORS_ORIGIN}`);
 });
 
 export default app;

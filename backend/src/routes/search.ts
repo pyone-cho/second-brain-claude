@@ -19,6 +19,9 @@ router.get('/', (req, res, next) => {
       throw new AppError(400, 'Missing required query parameter: q');
     }
 
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : undefined;
+
     const results = searchItems({
       q,
       type: req.query.type as string | undefined,
@@ -27,9 +30,11 @@ router.get('/', (req, res, next) => {
       dateFrom: req.query.dateFrom as string | undefined,
       dateTo: req.query.dateTo as string | undefined,
       pinned: req.query.pinned as string | undefined,
+      limit,
+      offset,
     });
 
-    res.json({ data: results });
+    res.json(results);
   } catch (err) {
     next(err);
   }
