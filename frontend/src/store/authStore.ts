@@ -113,16 +113,25 @@ export const useAuthStore = create<AuthStore>()(
 
           // Check if password matches stored hash
           const state = get();
+          const trimmedEmailForCheck = email.trim().toLowerCase();
           const inputHash = hashPassword(password);
-          if (state._passwordHash && state.user?.email === email.trim().toLowerCase()) {
+
+          if (state._passwordHash) {
+            // We have a stored password — validate against it
+            // The stored user email must match (or be null if just logged out)
+            if (state.user?.email && state.user.email !== trimmedEmailForCheck) {
+              // Different email than registered — reject
+              set({ isLoading: false, error: 'Invalid email or password' });
+              return { success: false, error: 'Invalid email or password' };
+            }
             if (inputHash !== state._passwordHash) {
               set({ isLoading: false, error: 'Invalid email or password' });
               return { success: false, error: 'Invalid email or password' };
             }
-          } else if (state._passwordHash && state.user?.email !== email.trim().toLowerCase()) {
-            // Different email — require registration first
-            set({ isLoading: false, error: 'Invalid email or password' });
-            return { success: false, error: 'Invalid email or password' };
+          } else {
+            // No stored password hash — user must register first
+            set({ isLoading: false, error: 'Invalid email or password. Please register first.' });
+            return { success: false, error: 'Invalid email or password. Please register first.' };
           }
 
           const trimmedEmail = email.trim().toLowerCase();
@@ -196,7 +205,8 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       logout: () => {
-        set({ user: null, token: null, _passwordHash: null, isLoading: false, error: null });
+        set({ user: null, token: null, isLoading: false, error: null });
+        // Note: _passwordHash is intentionally NOT cleared — needed to validate next login
         // Clear app data to prevent data leakage between users
         useAppStore.setState({
           items: [],
