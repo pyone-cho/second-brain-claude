@@ -73,7 +73,7 @@ export function TabBar() {
               key={tab.path}
               to={tab.path}
               className={clsx(
-                'flex flex-col items-center justify-center gap-0.5 min-w-0 px-1 py-1 rounded-lg transition-colors duration-150',
+                'flex flex-col items-center justify-center gap-0.5 min-w-0 px-1 py-1 rounded-lg transition-all duration-150 active:scale-[0.92]',
                 'focus:outline-none focus:ring-2 focus:ring-brand-500',
                 isActive
                   ? 'text-brand-600 dark:text-brand-400'

@@ -138,7 +138,7 @@ export function ItemCard({ item, onMoveStatus, onDelete, onTogglePin }: ItemCard
         </div>
 
         {isExpanded && (
-          <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+          <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2 animate-fade-in">
             <ExpandedContent item={item} />
           </div>
         )}

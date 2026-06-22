@@ -15,7 +15,7 @@ const defaultIcon = (
 
 export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+    <div className="flex flex-col items-center justify-center py-16 px-4 text-center animate-fade-in">
       <div className="mb-4">{icon || defaultIcon}</div>
       <h3 className="text-lg font-medium text-slate-700 dark:text-slate-300 mb-1">{title}</h3>
       {description && (

@@ -31,8 +31,9 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           id={id}
           className={clsx(
             'w-full rounded-lg border bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100',
-            'px-3 py-2 text-sm pr-10',
+            'px-3 py-2 text-sm pr-10 cursor-pointer',
             'transition-colors duration-150',
+            'disabled:bg-slate-50 dark:disabled:bg-slate-800/50 disabled:text-slate-400 dark:disabled:text-slate-500 disabled:cursor-not-allowed',
             'focus:outline-none focus:ring-2 focus:ring-offset-0',
             'appearance-none bg-no-repeat',
             'bg-[url("data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2220%22%20height%3D%2220%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%221.5%22%3E%3Cpath%20d%3D%22m6%208%204%204%204-4%22%2F%3E%3C%2Fsvg%3E")]',

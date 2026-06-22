@@ -83,7 +83,9 @@ export function ITInfraTable({ items, onTogglePin, onEdit, onDelete }: ITInfraTa
       <div className="inline-flex items-center gap-1">
         {children}
         {sortField === field && (
-          <span className="text-brand-500">{sortDir === 'asc' ? ' ↑' : ' ↓'}</span>
+          <svg className={clsx('w-3.5 h-3.5 transition-transform', sortDir === 'desc' && 'rotate-180')} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+          </svg>
         )}
       </div>
     </th>
@@ -166,7 +168,7 @@ export function ITInfraTable({ items, onTogglePin, onEdit, onDelete }: ITInfraTa
                     {format(new Date(item.updatedAt), 'MMM d, yyyy')}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-right">
-                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center justify-end gap-1 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                       {onTogglePin && (
                         <button
                           onClick={(e) => { e.stopPropagation(); onTogglePin(item.id); }}
@@ -256,7 +258,7 @@ function ITInfraDetail({ item, onClose }: { item: ITInfraItem; onClose: () => vo
         <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
           {pm.item || 'IT Infra Detail'}
         </h3>
-        <button onClick={onClose} className="p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+        <button onClick={onClose} className="p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-500 transition-colors">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>

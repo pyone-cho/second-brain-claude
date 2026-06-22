@@ -80,7 +80,9 @@ export function MemoTable({ items, onTogglePin, onDelete, onEdit }: MemoTablePro
       <div className="inline-flex items-center gap-1">
         {label}
         {sortField === field && (
-          <span className="text-brand-500">{sortDir === 'asc' ? ' ↑' : ' ↓'}</span>
+          <svg className={clsx('w-3.5 h-3.5 transition-transform', sortDir === 'desc' && 'rotate-180')} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+          </svg>
         )}
       </div>
     </th>
@@ -115,7 +117,7 @@ export function MemoTable({ items, onTogglePin, onDelete, onEdit }: MemoTablePro
               >
                 <td className="px-4 py-3">
                   <button
-                    className="text-left w-full flex items-center gap-2 min-w-0"
+                    className="text-left w-full flex items-center gap-2 min-w-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-500 rounded"
                     onClick={() => toggleRow(item.id)}
                   >
                     {item.pinned && (

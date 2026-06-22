@@ -9,7 +9,36 @@ A personal knowledge management system for tracking tasks, reading, purchases, a
 - **Single Server Website** — frontend AND backend implemented
   - Frontend: React 18 + TypeScript + Vite + Tailwind CSS ✓
     - Authentication (login/register) ✓
+    - Design system: Plus Jakarta Sans font, Heroicons SVG icons, micro-interaction animations ✓
   - Backend: Node.js + Express + TypeScript + SQLite (better-sqlite3) ✓
+
+---
+
+## Design System
+
+The UI follows a micro-interactions design approach tailored to productivity tools. Applied across all 17 frontend components and pages.
+
+| Element | Value |
+|---------|-------|
+| **Style** | Micro-interactions — subtle hover feedback, count-up animations, staggered entrance effects |
+| **Primary Color** | Brand purple (`#7C3AED`) — accent orange for CTAs |
+| **Font** | Plus Jakarta Sans (with Inter fallback) |
+| **Icons** | Heroicons SVG (outline style, 1.5pt stroke) — zero emoji icons |
+| **Effects** | 150–300ms transitions, `ease-out` easing, `scale-[1.02]` hover, ring accents on focus |
+
+### Key Design Rules
+- **No emoji icons** — replaced with semantic Heroicons SVG (clipboard, server, book-open, globe, shopping-bag, map-pin, sparkle)
+- **cursor-pointer on all interactive elements** — buttons, cards, table rows, sort headers, clear buttons
+- **Hover feedback on everything clickable** — color/shadow/border/scale transitions in 150–300ms
+- **Visible focus rings** — `focus:ring-2 focus:ring-brand-500` on all interactive elements
+- **Disabled states** — `disabled:cursor-not-allowed disabled:opacity-50` on all form controls
+- **`type="button"`** on all `<button>` elements to prevent unintended form submission
+- **Touch-friendly** — action buttons visible on mobile (not hover-only), 44px+ touch targets, active press feedback
+- **Safe area** — iOS safe-area-inset-bottom padding on mobile TabBar
+- **Light/dark parity** — every element tested in both themes with 4.5:1 contrast minimum
+
+### Components Covered
+Button, Input, Select, Textarea, Toggle, Card (shadow-sm), Badge, EmptyState, Modal, ConfirmDialog, ErrorBoundary, StatsCard, QuickAdd, SearchBar, FilterPanel, MemoTable, ITInfraTable, ItemCard, ItemList, ItemForm, Header, TabBar, Layout.
 
 ---
 
@@ -184,15 +213,28 @@ The web frontend includes a complete authentication system with login, registrat
 - **Encrypted export** - For IT Infra data
 
 ### UI/UX
-- **Dark mode** - Theme support
-- **Swipe actions** - Swipe to complete/delete/move
-- **Drag & drop** - Reorder items manually
-- **Widgets** - Home screen widgets for quick access
-- **Biometric lock** - App security
-- **Tab-based navigation** - Quick switch between Todo/Process/Memo
-- **Table view** - Sortable table view for Memo with expandable rows showing details
-- **Grid/Table toggle** - Switch between card grid and table views
-- **IT Infra table** - Dedicated columns for Name, Infra, Item, Kind, Description, URL/IP, Username, Password, New Password, Finish Date
+
+| Feature | Status |
+|---------|--------|
+| Dark mode with system preference detection | ✓ Implemented |
+| Tab-based navigation (desktop nav + mobile bottom bar) | ✓ Implemented |
+| Card grid view grouped by type | ✓ Implemented |
+| Sortable table view with expandable rows | ✓ Implemented |
+| Grid/Table toggle on Memo page with crossfade animation | ✓ Implemented |
+| Full-text search with type, category, date range, pinned filters | ✓ Implemented |
+| Password show/hide toggle with copy-to-clipboard | ✓ Implemented |
+| Dashboard with stats cards, quick-add, recent activity, breakdown by type, status bars | ✓ Implemented |
+| Dynamic item forms (fields adapt to item type) | ✓ Implemented |
+| Staggered entrance animations on dashboard | ✓ Implemented |
+| Count-up animation on stat card values | ✓ Implemented |
+| Expand/collapse item detail with fade-in | ✓ Implemented |
+| SVG sort indicators (ascending/descending) on table columns | ✓ Implemented |
+| Confirm dialogs for destructive actions | ✓ Implemented |
+| Loading skeletons, empty states, and error states on all pages | ✓ Implemented |
+| Swipe actions | Future |
+| Drag & drop reorder | Future |
+| Widgets / home screen quick access | Future |
+| Biometric lock | Future |
 
 ---
 

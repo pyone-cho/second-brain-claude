@@ -10,7 +10,6 @@ export function ProcessPage() {
     groupedByType,
     deleteItem,
     complete,
-    moveBack,
     togglePin,
   } = useItems('process');
   const [deleteId, setDeleteId] = useState<string | null>(null);

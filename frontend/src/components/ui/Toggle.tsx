@@ -10,7 +10,7 @@ interface ToggleProps {
 }
 
 export function Toggle({ checked, onChange, label, description, disabled = false, size = 'md' }: ToggleProps) {
-  const sizeStyles = size === 'sm' ? 'w-8 h-4.5' : 'w-11 h-6';
+  const sizeStyles = size === 'sm' ? 'w-8 h-5' : 'w-11 h-6';
   const dotSize = size === 'sm' ? 'w-3 h-3' : 'w-4 h-4';
   const translateOn = size === 'sm' ? 'translate-x-[14px]' : 'translate-x-[22px]';
 

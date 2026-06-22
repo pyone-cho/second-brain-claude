@@ -33,7 +33,7 @@ export function FilterPanel({ filters, onChange, onClear }: FilterPanelProps) {
     filters.type || filters.category || filters.dateFrom || filters.dateTo || filters.pinned;
 
   return (
-    <div className="flex flex-wrap items-end gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900">
+    <div className="flex flex-wrap items-end gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 animate-fade-in">
       <div className="w-40">
         <Select
           label="Type"

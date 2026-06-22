@@ -79,7 +79,7 @@ export function MemoPage() {
           <div className="flex rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden">
             <button
               onClick={() => setViewMode('cards')}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-inset ${
                 viewMode === 'cards'
                   ? 'bg-brand-600 text-white'
                   : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
@@ -89,7 +89,7 @@ export function MemoPage() {
             </button>
             <button
               onClick={() => setViewMode('table')}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-inset ${
                 viewMode === 'table'
                   ? 'bg-brand-600 text-white'
                   : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
@@ -128,6 +128,7 @@ export function MemoPage() {
         />
       )}
 
+      <div key={viewMode} className="animate-fade-in">
       {displayItems.length === 0 ? (
         isFiltering ? (
           <EmptyState
@@ -175,6 +176,8 @@ export function MemoPage() {
           status="memo"
         />
       )}
+
+      </div>
 
       <ConfirmDialog
         open={!!deleteId}

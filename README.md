@@ -82,23 +82,25 @@ The system supports six distinct item types, each with specialized fields at eac
 
 ### Frontend Features
 
+- **Design system** — Micro-interaction style with Plus Jakarta Sans font, Heroicons SVG icons, animated transitions
 - Dark mode — light, dark, and system preference
 - Tab-based navigation — Todo, Process, Memo with desktop nav and mobile bottom bar
-- Dashboard — stats cards with six color themes, quick-add widget
+- Dashboard — personalized greeting, stats cards with count-up animation, quick-add with SVG icons, recent activity with relative dates, breakdown by type, status bars with percentages
 - Dynamic forms — fields adapt to item type (task, book, website, purchase, trip, IT infra)
-- Card grid view — items grouped by type with color-coded categories
-- Sortable Memo table — expandable detail rows with column sorting
-- Dedicated IT Infra table — columns for Item, Infra, Kind, URL/IP, Date (passwords redacted for security)
-- Card Grid / Table view toggle on the Memo page
+- Card grid view — items grouped by type with color-coded categories, expandable detail rows
+- Sortable Memo table — expandable detail rows with SVG column sort indicators
+- Dedicated IT Infra table — columns for Item, Infra, Kind, URL/IP, Date (passwords hidden by default with show/hide toggle)
+- Card Grid / Table view toggle on the Memo page with crossfade animation
 - Full-text search with type, category, date range, and pinned filters
 - Pin/favorite items with amber highlight
 - URL/IP detection — URLs render as clickable links, IP addresses display as plain text
 - Password show/hide toggle with copy-to-clipboard
 - Lazy-loaded routes with Suspense loading spinners
 - Confirm dialogs for destructive actions (delete)
-- Loading, empty, and error states for all components
-- Responsive design (mobile-first)
-- Mock API backed by localStorage — fully functional without a backend
+- Loading skeletons, empty states, and error states for all components
+- Responsive design (mobile-first) with iOS safe area support
+- Touch-friendly action buttons (visible without hover on mobile)
+- Focus rings and keyboard navigation throughout
 
 ### Backend Features
 
@@ -163,48 +165,56 @@ second-brain-claude/
 │       ├── types/
 │       │   └── index.ts              # All TypeScript interfaces and types
 │       ├── api/
-│       │   └── mock.ts               # localStorage-backed mock API (offline-capable)
+│       │   ├── client.ts             # Real API client (Express backend)
+│       │   └── mock.ts               # Re-exports from client.ts
 │       ├── store/
-│       │   └── index.ts              # Zustand store (items, categories, UI state)
+│       │   ├── index.ts              # Zustand store (items, categories, queries)
+│       │   └── authStore.ts          # Auth store with localStorage persistence
 │       ├── hooks/
 │       │   ├── useItems.ts           # CRUD, search, filtered queries, group-by-type
-│       │   ├── useCategories.ts      # Category fetch/create/update/delete
 │       │   └── useTheme.ts           # Dark/light/system theme toggle
 │       ├── components/
 │       │   ├── ui/                   # Reusable primitives
-│       │   │   ├── Badge.tsx         # Status/type/category badge
-│       │   │   ├── Button.tsx        # Button with variants
-│       │   │   ├── Card.tsx          # Generic card wrapper
-│       │   │   ├── ConfirmDialog.tsx # Destructive action confirmation
-│       │   │   ├── EmptyState.tsx    # Empty list placeholder
-│       │   │   ├── Input.tsx         # Form input with label and error
-│       │   │   ├── Modal.tsx         # Accessible modal dialog
-│       │   │   ├── Select.tsx        # Dropdown select
-│       │   │   ├── Textarea.tsx      # Multi-line text input
-│       │   │   └── Toggle.tsx        # On/off toggle switch
+│       │   │   ├── Badge.tsx         # Status/type/category badge (6 type colors, 5 priority levels)
+│       │   │   ├── Button.tsx        # 5 variants, 4 sizes, loading spinner, type="button" default
+│       │   │   ├── Card.tsx          # Card wrapper with shadow, hover, padding options
+│       │   │   ├── ConfirmDialog.tsx # Destructive action confirmation (composes Modal + Button)
+│       │   │   ├── EmptyState.tsx    # Empty list placeholder with icon, title, action (fade-in animated)
+│       │   │   ├── ErrorBoundary.tsx # React error boundary with recovery button
+│       │   │   ├── Input.tsx         # Label, error, hint, left/right icons, password toggle, disabled state
+│       │   │   ├── Modal.tsx         # Accessible modal with focus trap, ESC close, scroll lock
+│       │   │   ├── Select.tsx        # Dropdown with disabled state, SVG chevron, dark mode aware
+│       │   │   ├── Textarea.tsx      # Multi-line text input with disabled state
+│       │   │   └── Toggle.tsx        # Accessible switch with label, description, disabled state
+│       │   ├── auth/
+│       │   │   └── ProtectedRoute.tsx # Auth guard with hydration-aware loading state
 │       │   ├── layout/
-│       │   │   ├── Header.tsx        # Top bar (title, theme toggle, nav)
-│       │   │   ├── TabBar.tsx        # Mobile bottom tab bar
-│       │   │   └── Layout.tsx        # Page layout wrapper
+│       │   │   ├── Header.tsx        # Top bar: SVG logo, nav, New button, theme cycle, user menu
+│       │   │   ├── TabBar.tsx        # Mobile bottom bar with SVG icons and iOS safe area padding
+│       │   │   └── Layout.tsx        # Page wrapper (max-w-6xl) with mobile bottom padding
 │       │   ├── items/
-│       │   │   ├── ItemCard.tsx      # Expandable, type-aware item card
-│       │   │   ├── ItemForm.tsx      # Dynamic form (fields change by type)
-│       │   │   └── ItemList.tsx      # Grouped list with headers by type
+│       │   │   ├── ItemCard.tsx      # Expandable card with pin/edit/delete actions, fade-in expand
+│       │   │   ├── ItemForm.tsx      # Dynamic form (fields change by type), photo upload, sticky actions
+│       │   │   └── ItemList.tsx      # Grouped list with uppercase section headers by type
 │       │   ├── tables/
-│       │   │   ├── MemoTable.tsx     # Sortable table with expandable rows
-│       │   │   └── ITInfraTable.tsx  # Dedicated IT infra column layout
+│       │   │   ├── MemoTable.tsx     # Sortable table with SVG sort chevrons, expandable detail rows
+│       │   │   └── ITInfraTable.tsx  # IT infra columns with password reveal/copy, detail panel
 │       │   ├── search/
-│       │   │   ├── SearchBar.tsx     # Full-text search input
-│       │   │   └── FilterPanel.tsx   # Type, category, date, pinned filters
+│       │   │   ├── SearchBar.tsx     # Full-text search with clear button and Escape key support
+│       │   │   └── FilterPanel.tsx   # Type, category, date range, pinned filters with slide-in animation
 │       │   └── dashboard/
-│       │       ├── StatsCard.tsx     # Stat card with 6 color themes
-│       │       └── QuickAdd.tsx      # Quick-add grid by item type
+│       │       ├── StatsCard.tsx     # Stat card with count-up animation, hover scale, 6 color themes
+│       │       └── QuickAdd.tsx      # 3x2 grid by type with Heroicons SVG (no emojis)
+│       ├── utils/
+│       │   └── item.ts               # title, subtitle, PATCH body helpers
+│       ├── constants.ts              # Type labels, display names
 │       └── pages/                    # Lazy-loaded route pages
-│           ├── DashboardPage.tsx     # Stats overview, recent activity, quick-add
+│           ├── DashboardPage.tsx     # Greeting, stats, recent activity, breakdown, quick-add, status bars
+│           ├── LoginPage.tsx         # Split-panel login/register with validation and demo mode
 │           ├── TodoPage.tsx          # Queue items, Start -> Process, delete
-│           ├── ProcessPage.tsx       # Active items, Complete -> Memo
-│           ├── MemoPage.tsx          # Archive with cards/table toggle, search
-│           └── ItemFormPage.tsx      # Create/edit items with dynamic fields
+│           ├── ProcessPage.tsx       # Active items, Complete -> Memo, delete
+│           ├── MemoPage.tsx          # Archive with cards/table toggle, search/filter, IT infra view
+│           └── ItemFormPage.tsx      # Create/edit items with dynamic fields and photo upload
 │
 └── backend/                          # Express API server
     ├── package.json                  # Backend dependencies & scripts
