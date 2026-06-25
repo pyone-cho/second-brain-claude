@@ -1,0 +1,67 @@
+services:
+  backend:
+    build:
+      context: ../..
+      dockerfile: Deployment/docker-deployment/Dockerfile.backend
+    image: second-brain-backend:latest
+    container_name: second-brain-backend-prod
+    expose:
+      - "3001"
+    volumes:
+      - backend-data:/app/data
+    env_file:
+      - .env
+    environment:
+      - PORT=3001
+      - NODE_ENV=production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -qO- http://localhost:3001/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - second-brain
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: Deployment/docker-deployment/Dockerfile.frontend
+    image: second-brain-frontend:latest
+    container_name: second-brain-frontend-prod
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    env_file:
+      - .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -qO- http://localhost:80/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - second-brain
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  backend-data:
+    name: second-brain-data
+
+networks:
+  second-brain:
+    name: second-brain
+    driver: bridge

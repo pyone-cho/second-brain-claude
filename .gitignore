@@ -6,3 +6,7 @@ dist/
 *.db-shm
 .env
 .DS_Store
+
+# Deployment
+Deployment/production/logs/
+Deployment/production/backups/
