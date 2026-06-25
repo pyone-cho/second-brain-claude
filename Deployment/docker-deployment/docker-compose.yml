@@ -30,7 +30,7 @@ services:
     image: second-brain-frontend:latest
     container_name: second-brain-frontend
     ports:
-      - "8080:80"
+      - "80:80"
     depends_on:
       backend:
         condition: service_healthy
