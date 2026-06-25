@@ -6,7 +6,7 @@ production using Docker Compose.
 ## Architecture
 
 ```
-Browser (localhost:8080)
+Browser (localhost:80)
        |
        v
   [nginx container]  ← serves React static files, proxies /api → backend
@@ -19,8 +19,8 @@ Browser (localhost:8080)
   `/api/*` requests to the backend service.
 - **Backend**: Express API server with SQLite database persisted on a named
   Docker volume.
-- **Data**: The SQLite file lives on a named volume (`db-data`) and survives
-  container restarts, recreations, and upgrades.
+- **Data**: The SQLite file is bind-mounted from `backend/data/second-brain.db`
+  on the host, so it persists on the host filesystem.
 
 ## Prerequisites
 
@@ -47,16 +47,16 @@ docker compose up -d
 docker compose ps
 ```
 
-The application will be available at **http://localhost:8080** once both
+The application will be available at **http://localhost** once both
 containers show `healthy`.
 
 ## Access URLs
 
 | Service  | URL                        |
 |----------|----------------------------|
-| Frontend | http://localhost:8080      |
-| API      | http://localhost:8080/api/ |
-| Health   | http://localhost:8080/api/health |
+| Frontend | http://localhost           |
+| API      | http://localhost/api/      |
+| Health   | http://localhost/api/health|
 
 The API is only accessible through the nginx proxy; the backend container does
 not expose port 3001 to the host.
@@ -131,28 +131,24 @@ docker compose exec backend sh
 
 ## Data Persistence
 
-The SQLite database is stored on a named volume (`db-data`). This volume
-survives:
+The SQLite database is bind-mounted from `backend/data/second-brain.db` on the
+host. The data file persists on the host filesystem and survives:
 
-- `docker compose down` (unless `-v` is used)
+- `docker compose down`
 - Container recreation
 - Image rebuilds
 - System reboots
 
-To see where Docker stores the volume data:
-
-```bash
-docker volume inspect second-brain-db-data
-```
-
 ### Backing Up the Database
+
+Since the database is bind-mounted, you can copy it directly from the host:
 
 ```bash
 # Create a backup directory
 mkdir -p ./backup
 
-# Copy the database file from the backend container
-docker compose cp backend:/app/data/second-brain.db ./backup/
+# Copy the database file
+cp ../../backend/data/second-brain.db ./backup/
 ```
 
 For an automated approach with safety against writes during copy:
@@ -165,18 +161,19 @@ docker compose cp backend:/tmp/backup.db ./backup/second-brain.db
 ### Restoring a Backup
 
 ```bash
-docker compose cp ./backup/second-brain.db backend:/app/data/second-brain.db
+cp ./backup/second-brain.db ../../backend/data/second-brain.db
 docker compose restart backend
 ```
 
 ## Troubleshooting
 
-### Port 8080 already in use
+### Port 80 already in use
 
-Change the port in `.env`:
+Change the port in `docker-compose.yml`:
 
-```
-FRONTEND_PORT=3000
+```yaml
+ports:
+  - "8080:80"
 ```
 
 Then run `docker compose up -d` again.
