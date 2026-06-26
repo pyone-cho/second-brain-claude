@@ -11,3 +11,4 @@ dist/
 Deployment/production/logs/
 Deployment/production/backups/
 .vercel
+.env*

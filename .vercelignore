@@ -1,0 +1,12 @@
+backend/
+backend-src/
+frontend/node_modules/
+node_modules/
+Deployment/
+slides/
+screenshots/
+*.md
+*.png
+.env.vercel
+.dockerignore
+.docker/
