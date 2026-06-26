@@ -1,0 +1,6 @@
+# Ignore generated SSL certificates (keep this file so the directory is tracked)
+*.pem
+*.key
+*.crt
+*.csr
+*.srl

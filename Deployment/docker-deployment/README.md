@@ -6,7 +6,7 @@ production using Docker Compose.
 ## Architecture
 
 ```
-Browser (localhost:80)
+Browser (localhost:80 or :443)
        |
        v
   [nginx container]  ← serves React static files, proxies /api → backend
@@ -52,14 +52,87 @@ containers show `healthy`.
 
 ## Access URLs
 
-| Service  | URL                        |
-|----------|----------------------------|
-| Frontend | http://localhost           |
-| API      | http://localhost/api/      |
-| Health   | http://localhost/api/health|
+| Service  | URL                          |
+|----------|------------------------------|
+| Frontend | http://localhost              |
+| API      | http://localhost/api/         |
+| Health   | http://localhost/api/health   |
 
 The API is only accessible through the nginx proxy; the backend container does
 not expose port 3001 to the host.
+
+## SSL / HTTPS
+
+By default the deployment runs on HTTP only. To enable HTTPS with a
+self-signed certificate (for development) or a real certificate (for
+production), use the SSL override compose file.
+
+### Option A — Self-signed certificate (development)
+
+```bash
+# 1. Generate self-signed certificates
+./ssl/generate-self-signed.sh
+
+# 2. Start with the SSL override
+docker compose -f docker-compose.yml -f docker-compose.ssl.yml up -d
+```
+
+The app is now available at **https://localhost**. Browsers will show a
+warning because the certificate is self-signed — click through to proceed.
+
+To issue for a custom domain:
+
+```bash
+./ssl/generate-self-signed.sh myapp.local
+```
+
+### Option B — Trusted certificate (production / Let's Encrypt)
+
+1. Obtain a certificate from a CA (e.g. [Let's Encrypt](https://letsencrypt.org/)
+   with [certbot](https://certbot.eff.org/)).
+
+2. Place the files:
+   ```
+   ssl/server.crt   ← full chain (cert + intermediates)
+   ssl/server.key   ← private key
+   ```
+
+3. Start with the SSL override:
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.ssl.yml up -d
+   ```
+
+#### Let's Encrypt quick reference
+
+```bash
+# Install certbot (Ubuntu/Debian)
+sudo apt install certbot
+
+# Obtain a certificate (standalone mode — stop nginx first)
+sudo certbot certonly --standalone -d yourdomain.com
+
+# Copy/rename to the ssl directory
+sudo cp /etc/letsencrypt/live/yourdomain.com/fullchain.pem ssl/server.crt
+sudo cp /etc/letsencrypt/live/yourdomain.com/privkey.pem   ssl/server.key
+sudo chown $(whoami) ssl/server.*
+
+# Start with SSL
+docker compose -f docker-compose.yml -f docker-compose.ssl.yml up -d
+```
+
+### Custom HTTPS port
+
+Set `HTTPS_PORT` in your `.env` file to use a port other than 443:
+
+```bash
+HTTPS_PORT=8443
+```
+
+### Disabling HTTP redirect
+
+When using the SSL override, all HTTP (port 80) requests are redirected to
+HTTPS. To disable this behaviour, remove port 80 from `docker-compose.yml` or
+create a custom nginx config without the redirect block.
 
 ## Environment Variables
 
@@ -71,6 +144,14 @@ cp .env.example .env
 
 Edit `.env` to change the host port or backend settings before running
 `docker compose up`.
+
+| Variable         | Default | Description                                      |
+|------------------|---------|--------------------------------------------------|
+| `PORT`           | `3001`  | Backend port inside the container                |
+| `NODE_ENV`       | `production` | Node environment                            |
+| `ENCRYPTION_KEY` | —       | **Required.** Secret key for data encryption     |
+| `FRONTEND_PORT`  | `80`    | Host port for HTTP                               |
+| `HTTPS_PORT`     | `443`   | Host port for HTTPS (SSL override only)          |
 
 ## Common Operations
 
@@ -169,14 +250,23 @@ docker compose restart backend
 
 ### Port 80 already in use
 
-Change the port in `docker-compose.yml`:
+Change the port in `.env`:
 
-```yaml
-ports:
-  - "8080:80"
+```bash
+FRONTEND_PORT=8080
 ```
 
 Then run `docker compose up -d` again.
+
+### Port 443 already in use
+
+Change the HTTPS port in `.env`:
+
+```bash
+HTTPS_PORT=8443
+```
+
+Then restart with the SSL override.
 
 ### Backend fails to start
 
@@ -195,6 +285,16 @@ docker compose logs backend
 docker compose exec frontend wget -qO- http://backend:3001/api/health
 ```
 
+### SSL certificate errors
+
+- **Browser shows "Not Secure"**: Expected for self-signed certificates. Click
+  through the warning or use a trusted CA for production.
+- **nginx fails to start with SSL**: Verify the certificate files exist:
+  ```bash
+  ls -la ssl/server.crt ssl/server.key
+  ```
+- **Certificate expired**: Regenerate self-signed certs or renew your CA cert.
+
 ### Rebuilding from scratch
 
 ```bash
@@ -211,11 +311,14 @@ need to update the CORS origin in the backend source file
 
 ## File Overview
 
-| File                 | Purpose                                  |
-|----------------------|------------------------------------------|
-| `docker-compose.yml` | Service definitions, volumes, networks   |
-| `Dockerfile.backend` | Multi-stage build for the Express API    |
-| `Dockerfile.frontend`| Multi-stage build for the React app      |
-| `nginx.conf`         | Nginx config (proxy, SPA fallback, gzip) |
-| `.env.example`       | Template for environment variables       |
-| `.dockerignore`      | Files excluded from Docker build context |
+| File                      | Purpose                                      |
+|---------------------------|----------------------------------------------|
+| `docker-compose.yml`      | Service definitions, volumes, networks       |
+| `docker-compose.ssl.yml`  | SSL override (HTTPS + HTTP→HTTPS redirect)   |
+| `Dockerfile.backend`      | Multi-stage build for the Express API        |
+| `Dockerfile.frontend`     | Multi-stage build for the React app          |
+| `nginx.conf`              | Nginx config for HTTP only                   |
+| `nginx-ssl.conf`          | Nginx config with SSL termination            |
+| `ssl/generate-self-signed.sh` | Script to generate self-signed certs     |
+| `.env.example`            | Template for environment variables           |
+| `.dockerignore`           | Files excluded from Docker build context     |
