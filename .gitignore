@@ -10,3 +10,5 @@ dist/
 # Deployment
 Deployment/production/logs/
 Deployment/production/backups/
+.vercel
+.env*

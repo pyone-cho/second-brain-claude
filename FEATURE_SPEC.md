@@ -10,7 +10,10 @@ A personal knowledge management system for tracking tasks, reading, purchases, a
   - Frontend: React 18 + TypeScript + Vite + Tailwind CSS ✓
     - Authentication (login/register) ✓
     - Design system: Plus Jakarta Sans font, Heroicons SVG icons, micro-interaction animations ✓
-  - Backend: Node.js + Express + TypeScript + SQLite (better-sqlite3) ✓
+  - Backend: Node.js + Express + TypeScript ✓
+    - Local: SQLite (better-sqlite3) ✓
+    - Production: Turso (hosted libSQL) via @libsql/client ✓
+  - Deployment: Vercel (serverless functions + static frontend) ✓
 
 ---
 
@@ -502,6 +505,17 @@ frontend/
 
 ## Backend Architecture (Implemented)
 
+### Production (Vercel + Turso)
+
+```
+api/
+└── index.ts                      # Express app — all /api/* routes, @libsql/client for Turso
+```
+
+The production API runs as Vercel serverless functions. The Express app in `api/index.ts` contains all routes (items, categories, search, it-infra, stats, health) and connects to a hosted Turso database via `@libsql/client`. Database migrations run automatically on first request.
+
+### Local Development (SQLite)
+
 ```
 backend/
 ├── package.json
@@ -529,11 +543,15 @@ backend/
 │       └── validate.ts          # Type/status/priority/infra/ID validators
 ```
 
+The local backend uses SQLite via better-sqlite3 for offline development. When `TURSO_DATABASE_URL` is not set, the API falls back to a local SQLite file.
+
 ### Backend Features Implemented
 
-- [x] Node.js + Express + TypeScript + SQLite (better-sqlite3)
-- [x] SQLite database with 7 tables + indexes (items, tasks_ordinary, tasks_it_infra, readings, purchases, trips, item_detail)
-- [x] WAL mode enabled for concurrent read performance
+- [x] Node.js + Express + TypeScript
+- [x] Dual database support — SQLite (local dev via better-sqlite3) and Turso (production via @libsql/client)
+- [x] Database with 7 tables + indexes (items, tasks_ordinary, tasks_it_infra, readings, purchases, trips, item_tags)
+- [x] WAL mode enabled for concurrent read performance (local SQLite)
+- [x] Automatic database migrations on first request (lazy initialization)
 - [x] Full CRUD endpoints for items and categories
 - [x] IT infra specific endpoints with search by IP, item name, infra, kind, description
 - [x] Full-text weighted search across memo items (type, status, category, date range, pinned filters)
@@ -551,6 +569,48 @@ backend/
 - [x] Request body size limit (1MB)
 - [x] Orphaned tag cleanup on item update
 - [x] Code deduplication — shared utilities in `src/utils/` (itemFields, crypto)
+
+---
+
+## Deployment
+
+### Vercel + Turso (Production)
+
+The production deployment uses **Vercel** for hosting and **Turso** for the database.
+
+| Component | Technology | Details |
+|-----------|-----------|---------|
+| **Frontend** | Vite static build | Served from Vercel's edge network |
+| **API** | Vercel serverless functions | Express app in `api/index.ts`, runs as serverless functions |
+| **Database** | Turso (hosted libSQL) | `@libsql/client` with auth token, automatic migrations |
+
+**Live URL:** https://second-brain-claude.vercel.app
+
+### Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `TURSO_DATABASE_URL` | Turso database URL (`libsql://...`) | Production |
+| `TURSO_AUTH_TOKEN` | Turso auth token for database access | Production |
+| `ENCRYPTION_KEY` | AES-256 key for password encryption | Optional (local dev) |
+| `CORS_ORIGIN` | Allowed CORS origin (defaults to `http://localhost:5173`) | Optional (local dev) |
+
+### How it works
+
+1. Vercel builds the frontend from `frontend/` using `npm run build`
+2. The `api/index.ts` Express app is compiled as serverless functions
+3. On first request, the API runs database migrations (creates tables if they don't exist)
+4. All `/api/*` requests are routed to the Express app via Vercel rewrites
+5. Non-API routes serve the frontend SPA (`index.html`)
+
+### Local vs Production
+
+| Aspect | Local Development | Production |
+|--------|------------------|------------|
+| Database | SQLite file (`backend/data/second-brain.db`) | Turso (hosted libSQL) |
+| API | Express on `localhost:3001` | Vercel serverless functions |
+| Frontend | Vite dev server on `localhost:5173` | Static build on Vercel edge |
+| CORS | Configurable via `CORS_ORIGIN` | Not needed (same origin) |
 
 ---
 
@@ -604,10 +664,12 @@ backend/
 - [x] Request logging
 
 ### Phase 5: Integration & Deployment
-- [ ] Wire frontend to real backend (replace mock API)
+- [x] Wire frontend to real backend (replace mock API) — frontend API client at `src/api/client.ts`
 - [x] Authentication / user accounts (frontend implemented)
+- [x] Production deployment — Vercel + Turso (https://second-brain-claude.vercel.app)
+- [x] Vercel serverless functions — Express app in `api/index.ts` with all routes
+- [x] Turso database — hosted libSQL with auth token
 - [ ] Cloud sync / multi-device support
-- [ ] Production deployment
 - [ ] Data export (PDF / Markdown / CSV / JSON)
 
 ### Phase 6: Advanced Frontend

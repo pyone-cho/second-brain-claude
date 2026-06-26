@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchStats } from '@/api/mock';
 import { useItems } from '@/hooks/useItems';
+import { useAuth } from '@/hooks/useAuth';
 import type { AppStats } from '@/types';
 import { TYPE_SHORT_LABELS } from '@/constants';
 import { getItemTitle } from '@/utils/item';
@@ -26,6 +27,7 @@ function formatRelativeDate(dateStr: string): string {
 }
 
 export function DashboardPage() {
+  const { user } = useAuth();
   const [stats, setStats] = useState<AppStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [statsError, setStatsError] = useState<string | null>(null);
@@ -65,7 +67,7 @@ export function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-            {getGreeting()} <span className="text-brand-600 dark:text-brand-400">.</span>
+            {getGreeting()}{user?.name ? <>, <span className="text-brand-600 dark:text-brand-400">{user.name}</span></> : <span className="text-brand-600 dark:text-brand-400">.</span>}
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             {format(today, 'EEEE, MMMM d, yyyy')} &mdash; Your second brain at a glance

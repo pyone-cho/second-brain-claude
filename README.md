@@ -4,6 +4,24 @@
 
 Second Brain is a full-stack application for capturing, processing, and archiving everything that matters to you — tasks, reading, purchases, and travel plans. Items flow through a **Todo -> Process -> Memo** lifecycle: capture quick thoughts into the queue, work on them actively while adding notes and context, then archive completed knowledge for search and retrieval.
 
+**🔗 Live Demo:** https://second-brain-claude.vercel.app/login
+
+---
+
+## Screenshots
+
+<div align="center">
+
+| Dashboard | Todo Queue |
+|-----------|------------|
+| ![Dashboard](screenshots/dashboard-final.png) | ![Todo](screenshots/todo-final.png) |
+
+| Process | Memo Table |
+|---------|------------|
+| ![Process](screenshots/process-final.png) | ![Memo Table](screenshots/memo-table.png) |
+
+</div>
+
 ---
 
 ## Badges
@@ -15,12 +33,15 @@ Second Brain is a full-stack application for capturing, processing, and archivin
 ![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=nodedotjs)
 ![Express](https://img.shields.io/badge/Express-4-000000?logo=express)
 ![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite)
+![Turso](https://img.shields.io/badge/Turso-libSQL-4FF8D2?logo=turso)
+![Vercel](https://img.shields.io/badge/Vercel-Deploy-000000?logo=vercel)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
 ---
 
 ## Table of Contents
 
+- [Screenshots](#screenshots)
 - [Features](#features)
   - [Core Workflow](#core-workflow)
   - [Item Types](#item-types)
@@ -31,6 +52,9 @@ Second Brain is a full-stack application for capturing, processing, and archivin
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
   - [Installation & Running](#installation--running)
+- [Deployment](#deployment)
+  - [Vercel + Turso](#vercel--turso)
+  - [Environment Variables](#environment-variables)
 - [API Endpoints](#api-endpoints)
   - [Items](#items)
   - [Categories](#categories)
@@ -105,8 +129,9 @@ The system supports six distinct item types, each with specialized fields at eac
 ### Backend Features
 
 - RESTful API with consistent JSON responses
-- SQLite database with 7 tables and performance indexes
-- WAL mode enabled for concurrent read performance
+- Dual database support — SQLite (local dev) and Turso/libSQL (production)
+- Database with 7 tables and performance indexes
+- WAL mode enabled for concurrent read performance (local SQLite)
 - Full CRUD for items and categories
 - IT Infra-specific endpoints with search by IP, item name, infra type, kind, and description
 - Weighted full-text search across memo items with pagination support
@@ -137,7 +162,9 @@ The system supports six distinct item types, each with specialized fields at eac
 | **Markdown Rendering** | react-markdown |
 | **Date Utilities** | date-fns |
 | **Backend Runtime** | Node.js 18+ with Express 4 |
-| **Database** | SQLite via better-sqlite3 |
+| **Database (Local)** | SQLite via better-sqlite3 |
+| **Database (Production)** | Turso (hosted libSQL) via @libsql/client |
+| **Deployment** | Vercel (serverless functions + static frontend) |
 | **Server Watcher** | tsx (TypeScript execution and watch mode) |
 | **Backend Language** | TypeScript 5 |
 
@@ -149,6 +176,11 @@ The system supports six distinct item types, each with specialized fields at eac
 second-brain-claude/
 ├── README.md                         # This file
 ├── FEATURE_SPEC.md                   # Full feature specification
+├── vercel.json                       # Vercel deployment config
+├── package.json                      # Root dependencies (api serverless function)
+│
+├── api/                              # Vercel serverless functions
+│   └── index.ts                      # Express app — all routes for /api/* (Turso/libSQL)
 │
 ├── frontend/                         # React SPA
 │   ├── index.html                    # Vite entry HTML
@@ -288,11 +320,61 @@ cd frontend
 npm run build    # TypeScript check + Vite production build -> dist/
 npm run preview  # Preview the production build locally
 
-# Backend
+# Backend (local)
 cd backend
 npm run build    # Compile TypeScript -> dist/
 npm start        # Start the compiled server
 ```
+
+---
+
+## Deployment
+
+### Vercel + Turso
+
+The production deployment uses **Vercel** for hosting and **Turso** (hosted libSQL) for the database.
+
+- **Frontend** — Static Vite build served from Vercel's edge network
+- **API** — Express app running as Vercel serverless functions in `api/index.ts`
+- **Database** — Turso (libSQL) with automatic migrations on first request
+
+**Live:** https://second-brain-claude.vercel.app
+
+#### Deploy your own
+
+```bash
+# 1. Install Turso CLI and log in
+curl -sSfL https://get.tur.so/install.sh | bash
+turso auth login
+
+# 2. Create a Turso database
+turso db create second-brain
+turso db tokens create second-brain
+
+# 3. Deploy to Vercel
+vercel --prod
+
+# 4. Set environment variables in Vercel dashboard
+#    Settings → Environment Variables:
+#    TURSO_DATABASE_URL = libsql://second-brain-<org>.turso.io
+#    TURSO_AUTH_TOKEN   = <token from step 2>
+
+# 5. Redeploy to pick up env vars
+vercel --prod
+```
+
+> **Note:** The `backend/` directory is for local development only (SQLite via better-sqlite3). Vercel uses `api/index.ts` with `@libsql/client` connecting to Turso. The `.vercelignore` excludes `backend/` from deployments.
+
+### Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `TURSO_DATABASE_URL` | Turso database URL (`libsql://...`) | Production |
+| `TURSO_AUTH_TOKEN` | Turso auth token | Production |
+| `ENCRYPTION_KEY` | AES-256 key for password encryption (local dev only) | Optional |
+| `CORS_ORIGIN` | Allowed CORS origin (local dev only, defaults to `http://localhost:5173`) | Optional |
+
+When `TURSO_DATABASE_URL` is not set, the API falls back to a local SQLite file (`file:./data/second-brain.db`).
 
 ---
 
@@ -401,7 +483,7 @@ All items share a common base: `id`, `type`, `status`, `category_id`, `priority`
 | **Phase 2** | Enhanced features — markdown, photo capture, search, IT infra validation | Completed |
 | **Phase 3** | Advanced — reading progress, trip tools, statistics dashboard, export, encryption | Planned |
 | **Phase 4** | Web frontend + backend — React SPA, Express API, all endpoints, mock API, dark mode, tables, search | Completed |
-| **Phase 5** | Integration & deployment — wire frontend to backend, auth, cloud sync, production deploy, data export | Planned |
+| **Phase 5** | Integration & deployment — wire frontend to backend, Vercel + Turso deploy, data export | Completed |
 | **Phase 6** | Advanced frontend — Kanban view, markdown rendering, photo crop, swipe actions, drag & drop, biometric lock | Planned |
 
 ---
@@ -427,4 +509,4 @@ MIT
 
 ---
 
-*Built with React, TypeScript, Express, and SQLite — a personal knowledge base you own.*
+*Built with React, TypeScript, Express, SQLite, and Turso — a personal knowledge base you own.*

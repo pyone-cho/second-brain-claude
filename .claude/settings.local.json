@@ -30,7 +30,13 @@
       "mcp__plugin_chrome-devtools-mcp_chrome-devtools__resize_page",
       "mcp__plugin_chrome-devtools-mcp_chrome-devtools__take_screenshot",
       "Bash(git *)",
-      "Bash(docker compose *)"
+      "Bash(docker compose *)",
+      "Bash(TURSO_DATABASE_URL=\"libsql://second-brain-pyone-cho.aws-ap-northeast-1.turso.io\" TURSO_AUTH_TOKEN=\"eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3ODI0MTQyNTgsImlkIjoiMDE5ZjAwMWQtODYwMS03ZmIyLTkwZjktMjZlNjI1ZTg1MzA0IiwicmlkIjoiMTFhNTg3NjktYWZkMi00Mzk0LTk1MDItOThkM2U5YzdlNTYzIn0.CRDzDv-Q65HetXsu9iCw2LPqvN4IZ8addWDuAPx1nRlU37TfW5FL5EYGYRN2a2SrsFCMWLVV1sVviNsyDnafBg\" ENCRYPTION_KEY=\"tF67DfUSjFmgBUqVPZCjO2AY+EUwUNU+Ol8BN3sCLOw=\" npm run *)",
+      "Bash(turso db *)",
+      "Bash(TURSO_DATABASE_URL=\"libsql://second-brain-pyone-cho.aws-eu-west-1.turso.io\" TURSO_AUTH_TOKEN=\"eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3ODI0NjkwNDksImlkIjoiMDE5ZjAzNmUtZGYwMS03OTM5LWE0MmQtZjkyYTRkN2NhYjZhIiwicmlkIjoiN2ZhYWIyMTAtNTFhYi00NThjLWFkN2ItMjQ4ZGMwN2ExNmEzIn0.STg2eem0ZnZg7ya4SCJfK08qty2l3yjVAKYTqkCSdWIIBhnEympY-RW5HnRZt-VYrOTEgBFl9IR-sQfr_j2jDQ\" ENCRYPTION_KEY=\"tF67DfUSjFmgBUqVPZCjO2AY+EUwUNU+Ol8BN3sCLOw=\" npm run seed)",
+      "Bash(vercel env *)",
+      "Bash(vercel *)",
+      "Bash(curl *)"
     ]
   },
   "enableAllProjectMcpServers": true,

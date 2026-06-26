@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useItems, useMemoSearch } from '@/hooks/useItems';
 import { MemoTable } from '@/components/tables/MemoTable';
@@ -9,7 +9,6 @@ import { FilterPanel } from '@/components/search/FilterPanel';
 import type { FilterValues } from '@/components/search/FilterPanel';
 import { Button } from '@/components/ui/Button';
 import { Toggle } from '@/components/ui/Toggle';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import type { ITInfraItem, SearchFilters } from '@/types';
 
@@ -29,15 +28,7 @@ export function MemoPage() {
   const [filters, setFilters] = useState<FilterValues>({});
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
   const [showFilters, setShowFilters] = useState(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
   const [showITInfraOnly, setShowITInfraOnly] = useState(false);
-
-  const handleDelete = useCallback(() => {
-    if (deleteId) {
-      deleteItem(deleteId);
-      setDeleteId(null);
-    }
-  }, [deleteId, deleteItem]);
 
   const searchFilters: SearchFilters = useMemo(() => ({
     query,
@@ -151,14 +142,14 @@ export function MemoPage() {
           items={itInfraItems}
           onTogglePin={togglePin}
           onEdit={(id) => navigate(`/items/${id}/edit`)}
-          onDelete={(id) => setDeleteId(id)}
+          onDelete={(id) => deleteItem(id)}
         />
       ) : viewMode === 'table' ? (
         <MemoTable
           items={displayItems}
           onTogglePin={togglePin}
           onEdit={(id) => navigate(`/items/${id}/edit`)}
-          onDelete={(id) => setDeleteId(id)}
+          onDelete={(id) => deleteItem(id)}
         />
       ) : (
         <ItemList
@@ -172,22 +163,12 @@ export function MemoPage() {
             return groups;
           })()}
           onTogglePin={togglePin}
-          onDelete={(id) => setDeleteId(id)}
+          onDelete={(id) => deleteItem(id)}
           status="memo"
         />
       )}
 
       </div>
-
-      <ConfirmDialog
-        open={!!deleteId}
-        onClose={() => setDeleteId(null)}
-        onConfirm={handleDelete}
-        title="Delete Item"
-        message="Are you sure you want to delete this item? This action cannot be undone."
-        confirmLabel="Delete"
-        variant="danger"
-      />
     </div>
   );
 }

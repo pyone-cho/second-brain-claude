@@ -12,19 +12,11 @@ export function ProcessPage() {
     complete,
     togglePin,
   } = useItems('process');
-  const [deleteId, setDeleteId] = useState<string | null>(null);
   const [completeId, setCompleteId] = useState<string | null>(null);
 
-  const handleDelete = useCallback(() => {
-    if (deleteId) {
-      deleteItem(deleteId);
-      setDeleteId(null);
-    }
-  }, [deleteId, deleteItem]);
-
-  const handleComplete = useCallback(() => {
+  const handleComplete = useCallback(async () => {
     if (completeId) {
-      complete(completeId);
+      await complete(completeId);
       setCompleteId(null);
     }
   }, [completeId, complete]);
@@ -53,19 +45,9 @@ export function ProcessPage() {
         items={items}
         groupedByType={groupedByType}
         onMoveStatus={(id) => setCompleteId(id)}
-        onDelete={(id) => setDeleteId(id)}
+        onDelete={(id) => deleteItem(id)}
         onTogglePin={togglePin}
         status="process"
-      />
-
-      <ConfirmDialog
-        open={!!deleteId}
-        onClose={() => setDeleteId(null)}
-        onConfirm={handleDelete}
-        title="Delete Item"
-        message="Are you sure you want to delete this item? This action cannot be undone."
-        confirmLabel="Delete"
-        variant="danger"
       />
 
       <ConfirmDialog

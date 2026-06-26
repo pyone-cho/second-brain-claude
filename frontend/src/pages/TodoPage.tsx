@@ -1,9 +1,7 @@
-import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useItems } from '@/hooks/useItems';
 import { ItemList } from '@/components/items/ItemList';
 import { Button } from '@/components/ui/Button';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 export function TodoPage() {
   const navigate = useNavigate();
@@ -14,14 +12,6 @@ export function TodoPage() {
     startProcessing,
     togglePin,
   } = useItems('todo');
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-
-  const handleDelete = useCallback(() => {
-    if (deleteId) {
-      deleteItem(deleteId);
-      setDeleteId(null);
-    }
-  }, [deleteId, deleteItem]);
 
   return (
     <div className="space-y-6">
@@ -48,19 +38,9 @@ export function TodoPage() {
         items={items}
         groupedByType={groupedByType}
         onMoveStatus={(id) => startProcessing(id)}
-        onDelete={(id) => setDeleteId(id)}
+        onDelete={(id) => deleteItem(id)}
         onTogglePin={togglePin}
         status="todo"
-      />
-
-      <ConfirmDialog
-        open={!!deleteId}
-        onClose={() => setDeleteId(null)}
-        onConfirm={handleDelete}
-        title="Delete Item"
-        message="Are you sure you want to delete this item? This action cannot be undone."
-        confirmLabel="Delete"
-        variant="danger"
       />
     </div>
   );
