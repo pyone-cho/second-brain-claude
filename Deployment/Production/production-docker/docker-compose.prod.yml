@@ -1,7 +1,7 @@
 services:
   backend:
     build:
-      context: ../..
+      context: ../../..
       dockerfile: Deployment/docker-deployment/Dockerfile.backend
     image: second-brain-backend:latest
     container_name: second-brain-backend-prod
@@ -31,7 +31,7 @@ services:
 
   frontend:
     build:
-      context: ../..
+      context: ../../..
       dockerfile: Deployment/docker-deployment/Dockerfile.frontend
     image: second-brain-frontend:latest
     container_name: second-brain-frontend-prod
