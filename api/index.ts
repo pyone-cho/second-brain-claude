@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { createClient } from '@libsql/client';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 
 // ── Database ─────────────────────────────────────────────────
 
@@ -52,6 +53,28 @@ function getDetailTable(type: string): string {
   }
 }
 
+// ── Auth helpers ──────────────────────────────────────────────
+
+const JWT_SECRET = process.env.JWT_SECRET || 'second-brain-dev-secret-change-in-production';
+const JWT_EXPIRY = '7d';
+
+function hashPassword(password: string): string {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return `${salt}:${hash}`;
+}
+
+function verifyPassword(password: string, stored: string): boolean {
+  const [salt, hash] = stored.split(':');
+  if (!salt || !hash) return false;
+  const computed = crypto.scryptSync(password, salt, 64).toString('hex');
+  return crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(hash));
+}
+
+function signToken(userId: string): string {
+  return jwt.sign({ sub: userId }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+}
+
 // ── Lazy migrations ──────────────────────────────────────────
 
 let migrationsDone = false;
@@ -63,6 +86,7 @@ async function ensureMigrations() {
     await db.execute('PRAGMA foreign_keys = ON');
   }
   await db.batch([
+    { sql: `CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')))`, args: [] },
     { sql: `CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, color TEXT, icon TEXT, created_at TEXT DEFAULT (datetime('now')))`, args: [] },
     { sql: `CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'todo', pinned INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`, args: [] },
     { sql: `CREATE TABLE IF NOT EXISTS tasks_ordinary (item_id TEXT PRIMARY KEY REFERENCES items(id) ON DELETE CASCADE, category TEXT, name TEXT, due_date TEXT, priority TEXT DEFAULT 'medium', problem TEXT, experience TEXT, note TEXT, photo TEXT)`, args: [] },
@@ -213,6 +237,139 @@ async function getItemById(id: string): Promise<Record<string, unknown> | null> 
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// ── Auth middleware ────────────────────────────────────────────
+
+// Extend Express Request to carry authenticated user id
+declare global {
+  namespace Express {
+    interface Request {
+      userId?: string;
+    }
+  }
+}
+
+function authenticate(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const header = req.headers.authorization;
+  if (!header || !header.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  try {
+    const token = header.slice(7);
+    const payload = jwt.verify(token, JWT_SECRET) as { sub: string };
+    req.userId = payload.sub;
+    next();
+  } catch {
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+}
+
+// ── Auth routes ────────────────────────────────────────────────
+
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { name, email, password } = req.body || {};
+
+    // Validate
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: 'Name is required' });
+    }
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRe.test(email)) {
+      return res.status(400).json({ error: 'Please enter a valid email address' });
+    }
+    if (!password || typeof password !== 'string' || password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    // Check uniqueness
+    const existing = await db.execute({
+      sql: 'SELECT id FROM users WHERE email = ?',
+      args: [email.toLowerCase().trim()],
+    });
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: 'An account with this email already exists' });
+    }
+
+    const id = crypto.randomUUID();
+    const passwordHash = hashPassword(password);
+
+    await db.execute({
+      sql: 'INSERT INTO users (id, name, email, password_hash) VALUES (?, ?, ?, ?)',
+      args: [id, name.trim(), email.toLowerCase().trim(), passwordHash],
+    });
+
+    const token = signToken(id);
+    res.status(201).json({
+      data: {
+        user: { id, name: name.trim(), email: email.toLowerCase().trim() },
+        token,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Find user
+    const result = await db.execute({
+      sql: 'SELECT id, name, email, password_hash FROM users WHERE email = ?',
+      args: [normalizedEmail],
+    });
+
+    if (result.rows.length === 0) {
+      // Auto-register for demo-friendly experience
+      if (password.length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters' });
+      }
+      const id = crypto.randomUUID();
+      const passwordHash = hashPassword(password);
+      // Generate a name from the email
+      const name = normalizedEmail.split('@')[0];
+
+      await db.execute({
+        sql: 'INSERT INTO users (id, name, email, password_hash) VALUES (?, ?, ?, ?)',
+        args: [id, name, normalizedEmail, passwordHash],
+      });
+
+      const token = signToken(id);
+      return res.json({
+        data: {
+          user: { id, name, email: normalizedEmail },
+          token,
+        },
+      });
+    }
+
+    const user = result.rows[0] as Record<string, any>;
+    if (!verifyPassword(password, user.password_hash as string)) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    const token = signToken(user.id as string);
+    res.json({
+      data: {
+        user: { id: user.id, name: user.name, email: user.email },
+        token,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── Items ────────────────────────────────────────────────────
