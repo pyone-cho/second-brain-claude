@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { AnyItem, ItemType } from '@/types';
 import { fetchItem, createItem, updateItem } from '@/api/mock';
+import { useAppStore } from '@/store';
 import { ItemForm } from '@/components/items/ItemForm';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -59,6 +60,8 @@ export function ItemFormPage() {
         } else {
           await createItem(formItem);
         }
+        // Refresh Zustand from backend so lists show the new/updated item
+        await useAppStore.getState().hydrate();
         navigate(-1);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to save item');

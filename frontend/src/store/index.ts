@@ -6,7 +6,13 @@ import type {
   ItemStatus,
   ItemType,
 } from '@/types';
-import { fetchItems, fetchCategories } from '@/api/client';
+import {
+  fetchItems,
+  fetchCategories,
+  deleteItem as deleteItemApi,
+  moveItemStatus as moveItemStatusApi,
+  updateItem as updateItemApi,
+} from '@/api/client';
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -39,9 +45,9 @@ interface AppState {
   // Item actions
   addItem: (item: AnyItem) => void;
   updateItem: (id: string, updates: Partial<AnyItem>) => void;
-  deleteItem: (id: string) => void;
-  moveItemStatus: (id: string, newStatus: ItemStatus) => void;
-  togglePin: (id: string) => void;
+  deleteItem: (id: string) => Promise<void>;
+  moveItemStatus: (id: string, newStatus: ItemStatus) => Promise<void>;
+  togglePin: (id: string) => Promise<void>;
 
   // Category actions
   addCategory: (cat: Omit<Category, 'id' | 'createdAt'>) => Category;
@@ -96,24 +102,32 @@ export const useAppStore = create<AppState>()(
           ),
         })),
 
-      deleteItem: (id) =>
-        set((s) => ({ items: s.items.filter((it) => it.id !== id) })),
+      deleteItem: async (id) => {
+        await deleteItemApi(id);
+        set((s) => ({ items: s.items.filter((it) => it.id !== id) }));
+      },
 
-      moveItemStatus: (id, newStatus) =>
+      moveItemStatus: async (id, newStatus) => {
+        await moveItemStatusApi(id, newStatus);
         set((s) => ({
           items: s.items.map((it) =>
             it.id === id
               ? { ...it, status: newStatus, updatedAt: nowISO() } as AnyItem
               : it
           ),
-        })),
+        }));
+      },
 
-      togglePin: (id) =>
+      togglePin: async (id) => {
+        const item = get().items.find((it) => it.id === id);
+        if (!item) return;
+        await updateItemApi(id, { pinned: !item.pinned } as Partial<AnyItem>);
         set((s) => ({
           items: s.items.map((it) =>
             it.id === id ? { ...it, pinned: !it.pinned } as AnyItem : it
           ),
-        })),
+        }));
+      },
 
       // ── Category actions ──────────────────────────────
 

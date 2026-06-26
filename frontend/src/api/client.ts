@@ -134,10 +134,33 @@ export async function fetchItem(id: string): Promise<AnyItem | undefined> {
   return mapItem(raw);
 }
 
+function flattenItem(item: Partial<AnyItem>): Record<string, unknown> {
+  const flat: Record<string, unknown> = {};
+  // Copy top-level fields
+  for (const key of ['id', 'type', 'status', 'pinned', 'tags', 'createdAt', 'updatedAt']) {
+    if (key in item) flat[key] = (item as any)[key];
+  }
+  // Flatten todo fields
+  const todo = (item as any).todo;
+  if (todo) {
+    for (const [k, v] of Object.entries(todo)) {
+      if (v !== undefined && v !== null && v !== '') flat[k] = v;
+    }
+  }
+  // Flatten processMemo fields
+  const pm = (item as any).processMemo;
+  if (pm) {
+    for (const [k, v] of Object.entries(pm)) {
+      if (v !== undefined && v !== null && v !== '') flat[k] = v;
+    }
+  }
+  return flat;
+}
+
 export async function createItem(item: Partial<AnyItem>): Promise<AnyItem> {
   const raw = await request<Record<string, unknown>>('/items', {
     method: 'POST',
-    body: JSON.stringify(item),
+    body: JSON.stringify(flattenItem(item)),
   });
   return mapItem(raw);
 }
@@ -148,7 +171,7 @@ export async function updateItem(
 ): Promise<AnyItem | undefined> {
   const raw = await request<Record<string, unknown>>(`/items/${id}`, {
     method: 'PUT',
-    body: JSON.stringify(updates),
+    body: JSON.stringify(flattenItem({ ...updates, id })),
   });
   return mapItem(raw);
 }
