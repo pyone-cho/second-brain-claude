@@ -129,9 +129,9 @@ export const useAuthStore = create<AuthStore>()(
               return { success: false, error: 'Invalid email or password' };
             }
           } else {
-            // No stored password hash — user must register first
-            set({ isLoading: false, error: 'Invalid email or password. Please register first.' });
-            return { success: false, error: 'Invalid email or password. Please register first.' };
+            // No stored password hash — auto-register on first login (makes demo credentials work)
+            const passwordHash = hashPassword(password);
+            set({ _passwordHash: passwordHash });
           }
 
           const trimmedEmail = email.trim().toLowerCase();
