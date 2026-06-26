@@ -11,13 +11,12 @@
     "seed": "tsx src/seed.ts"
   },
   "dependencies": {
-    "better-sqlite3": "^11.7.0",
+    "@libsql/client": "^0.17.4",
     "cors": "^2.8.5",
     "express": "^4.21.0",
     "uuid": "^10.0.0"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.12",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/uuid": "^10.0.0",

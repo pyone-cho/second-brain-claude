@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
-import db from '../db.js';
+import type { InArgs } from '@libsql/client';
+import client from '../db.js';
 import type { ItemType, ItemStatus, Priority } from '../middleware/validate.js';
 import { encrypt, isEncrypted } from '../utils/crypto.js';
 import {
@@ -200,15 +201,23 @@ function buildFullItem(row: Record<string, unknown>, tags: string[]): FullItem {
 }
 
 // ---------------------------------------------------------------------------
+// Helper: convert libsql row to a plain Record
+// ---------------------------------------------------------------------------
+
+function rowToRecord(row: Record<string, unknown>): Record<string, unknown> {
+  return { ...row };
+}
+
+// ---------------------------------------------------------------------------
 // Query items with optional filters
 // ---------------------------------------------------------------------------
 
-export function getItems(params: {
+export async function getItems(params: {
   status?: string;
   type?: string;
-}): FullItem[] {
-  const conditions: string[] = [];
-  const values: unknown[] = [];
+}, userId: string): Promise<FullItem[]> {
+  const conditions: string[] = ['i.user_id = ?'];
+  const values: (string | number | null)[] = [userId];
 
   if (params.status) {
     conditions.push('i.status = ?');
@@ -219,10 +228,8 @@ export function getItems(params: {
     values.push(params.type);
   }
 
-  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
-  // Single query joining all detail tables.
-  // Each item only has data in ONE detail table, so no duplication.
   const sql = `
     SELECT i.*,
       t.category         AS t_category, t.name AS t_name, t.due_date AS t_due_date,
@@ -248,14 +255,14 @@ export function getItems(params: {
     ORDER BY i.pinned DESC, i.created_at DESC
   `;
 
-  const rows = db.prepare(sql).all(...values) as Record<string, unknown>[];
+  const result = await client.execute({ sql, args: values });
+  const rows = result.rows;
 
   if (rows.length === 0) return [];
 
-  // Collapse conflicting column names into a single row shape per item
-  const flattened = rows.map((row) => flattenDetailColumns(row, row.type as string));
+  const flattened = rows.map((row) => flattenDetailColumns(rowToRecord(row), row.type as string));
   const itemIds = flattened.map((r) => r.id as string);
-  const tagsMap = getTagsForItems(itemIds);
+  const tagsMap = await getTagsForItems(itemIds);
 
   return flattened.map((row) => buildFullItem(row, tagsMap.get(row.id as string) || []));
 }
@@ -264,7 +271,7 @@ export function getItems(params: {
 // Get a single item by ID
 // ---------------------------------------------------------------------------
 
-export function getItemById(id: string): FullItem | null {
+export async function getItemById(id: string, userId: string): Promise<FullItem | null> {
   const sql = `
     SELECT i.*,
       t.category AS t_category, t.name AS t_name, t.due_date AS t_due_date,
@@ -286,14 +293,15 @@ export function getItemById(id: string): FullItem | null {
     LEFT JOIN readings r ON i.id = r.item_id
     LEFT JOIN purchases p ON i.id = p.item_id
     LEFT JOIN trips tr ON i.id = tr.item_id
-    WHERE i.id = ?
+    WHERE i.id = ? AND i.user_id = ?
   `;
 
-  const row = db.prepare(sql).get(id) as Record<string, unknown> | undefined;
-  if (!row) return null;
+  const result = await client.execute({ sql, args: [id, userId] });
+  if (result.rows.length === 0) return null;
 
+  const row = rowToRecord(result.rows[0]);
   const flat = flattenDetailColumns(row, row.type as string);
-  const tagsMap = getTagsForItems([id]);
+  const tagsMap = await getTagsForItems([id]);
   return buildFullItem(flat, tagsMap.get(id) || []);
 }
 
@@ -306,20 +314,14 @@ export interface CreateItemInput {
   status?: ItemStatus;
   pinned?: boolean;
   tags?: string[];
-  // Type-specific flat fields
   [key: string]: unknown;
 }
 
-export function createItem(input: CreateItemInput): FullItem {
+export async function createItem(input: CreateItemInput, userId: string): Promise<FullItem> {
   const id = uuidv4();
   const status: ItemStatus = input.status || 'todo';
   const pinned = input.pinned ? 1 : 0;
   const now = new Date().toISOString();
-
-  const insertItem = db.prepare(
-    `INSERT INTO items (id, type, status, pinned, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  );
 
   const detailTable = getDetailTable(input.type);
 
@@ -330,7 +332,7 @@ export function createItem(input: CreateItemInput): FullItem {
 
   const detailColumns: string[] = ['item_id'];
   const detailPlaceholders: string[] = ['?'];
-  const detailValues: unknown[] = [id];
+  const detailValues: (string | number | null)[] = [id];
 
   // For reading-book and reading-website, auto-set source_type
   if (input.type === 'reading-book') {
@@ -344,56 +346,72 @@ export function createItem(input: CreateItemInput): FullItem {
   }
 
   for (const field of allDetailFields) {
-    // Skip source_type if we already handled it above
     if (field === 'source_type' && (input.type === 'reading-book' || input.type === 'reading-website')) {
       continue;
     }
     if (input[field] !== undefined && input[field] !== null) {
       detailColumns.push(field);
       detailPlaceholders.push('?');
-      // Encrypt password fields before storing
       const value = ENCRYPTED_FIELDS.includes(field) && typeof input[field] === 'string'
         ? encrypt(input[field] as string)
         : input[field];
-      detailValues.push(value);
+      detailValues.push(value as string | number | null);
     }
   }
 
-  const insertDetail = db.prepare(
-    `INSERT INTO ${detailTable} (${detailColumns.join(', ')})
-     VALUES (${detailPlaceholders.join(', ')})`,
-  );
-
-  // Prepare tag-related statements (to be used inside the transaction)
+  // Prepare tags
   const tagNames: string[] = (input.tags || []).map((t: string) => t.trim()).filter((t: string) => t.length > 0);
-  const insertTag = db.prepare('INSERT OR IGNORE INTO tags (name) VALUES (?)');
-  const getTagId = db.prepare('SELECT id FROM tags WHERE name = ?');
-  const insertItemTag = db.prepare(
-    'INSERT OR IGNORE INTO item_tags (item_id, tag_id) VALUES (?, ?)',
-  );
 
-  // Execute everything in a single transaction
-  const doInsert = db.transaction(() => {
-    // 1. Insert the item record
-    insertItem.run(id, input.type, status, pinned, now, now);
+  // Build batch statements
+  const batch: Array<{ sql: string; args: InArgs }> = [];
 
-    // 2. Insert the type-specific detail record
-    insertDetail.run(...detailValues);
-
-    // 3. Insert tags and item_tags (now that the item exists)
-    for (const tagName of tagNames) {
-      insertTag.run(tagName);
-      const tag = getTagId.get(tagName) as { id: number } | undefined;
-      if (tag) {
-        insertItemTag.run(id, tag.id);
-      }
-    }
+  // 1. Insert the item record
+  batch.push({
+    sql: `INSERT INTO items (id, type, status, pinned, user_id, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    args: [id, input.type, status, pinned, userId, now, now],
   });
 
-  doInsert();
+  // 2. Insert the type-specific detail record
+  batch.push({
+    sql: `INSERT INTO ${detailTable} (${detailColumns.join(', ')})
+          VALUES (${detailPlaceholders.join(', ')})`,
+    args: detailValues,
+  });
+
+  // 3. Insert tags (INSERT OR IGNORE to avoid duplicates)
+  for (const tagName of tagNames) {
+    batch.push({
+      sql: 'INSERT OR IGNORE INTO tags (name) VALUES (?)',
+      args: [tagName],
+    });
+  }
+
+  // Execute the batch
+  await client.batch(batch, 'write');
+
+  // 4. Link tags to item (need to look up tag IDs first)
+  if (tagNames.length > 0) {
+    const linkBatch: Array<{ sql: string; args: InArgs }> = [];
+    for (const tagName of tagNames) {
+      const tagResult = await client.execute({
+        sql: 'SELECT id FROM tags WHERE name = ?',
+        args: [tagName],
+      });
+      if (tagResult.rows.length > 0) {
+        linkBatch.push({
+          sql: 'INSERT OR IGNORE INTO item_tags (item_id, tag_id) VALUES (?, ?)',
+          args: [id, tagResult.rows[0].id],
+        });
+      }
+    }
+    if (linkBatch.length > 0) {
+      await client.batch(linkBatch, 'write');
+    }
+  }
 
   // Return the full item
-  const item = getItemById(id);
+  const item = await getItemById(id, userId);
   if (!item) {
     throw new Error('Failed to create item');
   }
@@ -411,8 +429,8 @@ export interface UpdateItemInput {
   [key: string]: unknown;
 }
 
-export function updateItem(id: string, input: UpdateItemInput): FullItem {
-  const existing = getItemById(id);
+export async function updateItem(id: string, input: UpdateItemInput, userId: string): Promise<FullItem> {
+  const existing = await getItemById(id, userId);
   if (!existing) {
     throw new Error('NOT_FOUND');
   }
@@ -421,7 +439,7 @@ export function updateItem(id: string, input: UpdateItemInput): FullItem {
 
   // Update items table
   const itemUpdates: string[] = ['updated_at = ?'];
-  const itemValues: unknown[] = [now];
+  const itemValues: (string | number | null)[] = [now];
 
   if (input.status !== undefined) {
     itemUpdates.push('status = ?');
@@ -439,67 +457,85 @@ export function updateItem(id: string, input: UpdateItemInput): FullItem {
   const allDetailFields = [...todoFields, ...memoFields];
 
   const detailUpdates: string[] = [];
-  const detailValues: unknown[] = [];
+  const detailValues: (string | number | null)[] = [];
 
   for (const field of allDetailFields) {
     if (input[field] !== undefined) {
       detailUpdates.push(`${field} = ?`);
-      // Encrypt password fields before storing
       const value = ENCRYPTED_FIELDS.includes(field) && typeof input[field] === 'string'
         ? encrypt(input[field] as string)
         : input[field];
-      detailValues.push(value);
+      detailValues.push(value as string | number | null);
     }
   }
 
-  // Update tags if provided
-  const tagNames: string[] | undefined = input.tags;
-  const updateTags =
-    tagNames !== undefined && Array.isArray(tagNames);
+  // Build batch for item + detail updates
+  const batch: Array<{ sql: string; args: InArgs }> = [];
 
-  const doUpdate = db.transaction(() => {
-    // Update items table
-    db.prepare(
-      `UPDATE items SET ${itemUpdates.join(', ')} WHERE id = ?`,
-    ).run(...itemValues, id);
-
-    // Update detail table if there are changes
-    if (detailUpdates.length > 0) {
-      db.prepare(
-        `UPDATE ${detailTable} SET ${detailUpdates.join(', ')} WHERE item_id = ?`,
-      ).run(...detailValues, id);
-    }
-
-    // Replace tags if provided
-    if (updateTags) {
-      db.prepare('DELETE FROM item_tags WHERE item_id = ?').run(id);
-
-      if (tagNames.length > 0) {
-        const insertTag = db.prepare('INSERT OR IGNORE INTO tags (name) VALUES (?)');
-        const getTagId = db.prepare('SELECT id FROM tags WHERE name = ?');
-        const insertItemTag = db.prepare(
-          'INSERT OR IGNORE INTO item_tags (item_id, tag_id) VALUES (?, ?)',
-        );
-
-        for (const tagName of tagNames) {
-          const trimmed = tagName.trim();
-          if (!trimmed) continue;
-          insertTag.run(trimmed);
-          const tag = getTagId.get(trimmed) as { id: number };
-          if (tag) {
-            insertItemTag.run(id, tag.id);
-          }
-        }
-      }
-
-      // Clean up orphaned tags that no longer reference any item
-      db.prepare('DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM item_tags)').run();
-    }
+  // Update items table
+  batch.push({
+    sql: `UPDATE items SET ${itemUpdates.join(', ')} WHERE id = ?`,
+    args: [...itemValues, id],
   });
 
-  doUpdate();
+  // Update detail table if there are changes
+  if (detailUpdates.length > 0) {
+    batch.push({
+      sql: `UPDATE ${detailTable} SET ${detailUpdates.join(', ')} WHERE item_id = ?`,
+      args: [...detailValues, id],
+    });
+  }
 
-  const updated = getItemById(id);
+  await client.batch(batch, 'write');
+
+  // Update tags if provided
+  const tagNames: string[] | undefined = input.tags;
+  if (tagNames !== undefined && Array.isArray(tagNames)) {
+    // Delete existing item_tags
+    await client.execute({
+      sql: 'DELETE FROM item_tags WHERE item_id = ?',
+      args: [id],
+    });
+
+    if (tagNames.length > 0) {
+      // Insert new tags
+      const insertBatch: Array<{ sql: string; args: InArgs }> = [];
+      for (const tagName of tagNames) {
+        const trimmed = tagName.trim();
+        if (!trimmed) continue;
+        insertBatch.push({
+          sql: 'INSERT OR IGNORE INTO tags (name) VALUES (?)',
+          args: [trimmed],
+        });
+      }
+      await client.batch(insertBatch, 'write');
+
+      // Link tags to item
+      const linkBatch: Array<{ sql: string; args: InArgs }> = [];
+      for (const tagName of tagNames) {
+        const trimmed = tagName.trim();
+        if (!trimmed) continue;
+        const tagResult = await client.execute({
+          sql: 'SELECT id FROM tags WHERE name = ?',
+          args: [trimmed],
+        });
+        if (tagResult.rows.length > 0) {
+          linkBatch.push({
+            sql: 'INSERT OR IGNORE INTO item_tags (item_id, tag_id) VALUES (?, ?)',
+            args: [id, tagResult.rows[0].id],
+          });
+        }
+      }
+      if (linkBatch.length > 0) {
+        await client.batch(linkBatch, 'write');
+      }
+    }
+
+    // Clean up orphaned tags
+    await client.execute('DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM item_tags)');
+  }
+
+  const updated = await getItemById(id, userId);
   if (!updated) {
     throw new Error('Failed to update item');
   }
@@ -510,25 +546,31 @@ export function updateItem(id: string, input: UpdateItemInput): FullItem {
 // Delete an item
 // ---------------------------------------------------------------------------
 
-export function deleteItem(id: string): boolean {
-  const result = db.prepare('DELETE FROM items WHERE id = ?').run(id);
-  return result.changes > 0;
+export async function deleteItem(id: string, userId: string): Promise<boolean> {
+  const result = await client.execute({
+    sql: 'DELETE FROM items WHERE id = ? AND user_id = ?',
+    args: [id, userId],
+  });
+  return result.rowsAffected > 0;
 }
 
 // ---------------------------------------------------------------------------
 // Update only the status
 // ---------------------------------------------------------------------------
 
-export function updateItemStatus(id: string, newStatus: ItemStatus): FullItem {
-  const existing = getItemById(id);
+export async function updateItemStatus(id: string, newStatus: ItemStatus, userId: string): Promise<FullItem> {
+  const existing = await getItemById(id, userId);
   if (!existing) {
     throw new Error('NOT_FOUND');
   }
 
   const now = new Date().toISOString();
-  db.prepare('UPDATE items SET status = ?, updated_at = ? WHERE id = ?').run(newStatus, now, id);
+  await client.execute({
+    sql: 'UPDATE items SET status = ?, updated_at = ? WHERE id = ? AND user_id = ?',
+    args: [newStatus, now, id, userId],
+  });
 
-  const updated = getItemById(id);
+  const updated = await getItemById(id, userId);
   if (!updated) {
     throw new Error('Failed to update item status');
   }

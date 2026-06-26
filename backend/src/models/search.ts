@@ -1,4 +1,5 @@
-import db from '../db.js';
+import type { InArgs } from '@libsql/client';
+import client from '../db.js';
 import type { ItemType, ItemStatus } from '../middleware/validate.js';
 import {
   getTodoFields,
@@ -33,7 +34,7 @@ export interface SearchResponse {
   hasMore: boolean;
 }
 
-export function searchItems(params: {
+export async function searchItems(params: {
   q: string;
   type?: string;
   status?: string;
@@ -43,29 +44,22 @@ export function searchItems(params: {
   pinned?: string;
   limit?: number;
   offset?: number;
-}): SearchResponse {
+}, userId: string): Promise<SearchResponse> {
   const keyword = params.q.trim();
   if (!keyword) return { data: [], total: 0, hasMore: false };
 
   const limit = Math.min(Math.max(params.limit || 50, 1), 200);
   const offset = Math.max(params.offset || 0, 0);
 
-  // Split into individual search terms for AND matching
   const terms = keyword.split(/\s+/).filter((t) => t.length > 0);
 
-  // We search across multiple tables and UNION the results, then compute a
-  // match score based on which fields matched and how many terms matched.
-  const conditions: string[] = [];
-  const values: unknown[] = [];
+  const conditions: string[] = ['i.user_id = ?'];
+  const values: (string | number | null)[] = [userId];
 
-  // Base filters derived from the user's query params
-  // We always search only memo items (items that have been processed/read/etc.)
-  // UNLESS an explicit status filter is provided
   if (params.status) {
     conditions.push('i.status = ?');
     values.push(params.status);
   } else {
-    // Default: search memo items
     conditions.push("i.status = 'memo'");
   }
 
@@ -86,22 +80,15 @@ export function searchItems(params: {
     values.push(params.pinned === 'true' ? 1 : 0);
   }
 
-  const whereClause =
-    conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
   // Build LIKE patterns for each search term
-  // We search across: items.id, and detail-table text columns
   const searchClauses: string[] = [];
-  const searchValues: unknown[] = [];
+  const searchValues: (string | number | null)[] = [];
 
   for (const term of terms) {
     const pattern = `%${escapeLike(term)}%`;
 
-    // Search in item id
     searchClauses.push('i.id LIKE ?');
     searchValues.push(pattern);
-
-    // Search in tasks_ordinary
     searchClauses.push('t.name LIKE ?');
     searchValues.push(pattern);
     searchClauses.push('t.problem LIKE ?');
@@ -112,8 +99,6 @@ export function searchItems(params: {
     searchValues.push(pattern);
     searchClauses.push('t.category LIKE ?');
     searchValues.push(pattern);
-
-    // Search in tasks_it_infra
     searchClauses.push('ti.name LIKE ?');
     searchValues.push(pattern);
     searchClauses.push('ti.item_name LIKE ?');
@@ -128,8 +113,6 @@ export function searchItems(params: {
     searchValues.push(pattern);
     searchClauses.push('ti.remark LIKE ?');
     searchValues.push(pattern);
-
-    // Search in readings
     searchClauses.push('r.title LIKE ?');
     searchValues.push(pattern);
     searchClauses.push('r.author LIKE ?');
@@ -144,16 +127,12 @@ export function searchItems(params: {
     searchValues.push(pattern);
     searchClauses.push('r.note LIKE ?');
     searchValues.push(pattern);
-
-    // Search in purchases
     searchClauses.push('p.category LIKE ?');
     searchValues.push(pattern);
     searchClauses.push('p.desired_usability LIKE ?');
     searchValues.push(pattern);
     searchClauses.push('p.usable_where LIKE ?');
     searchValues.push(pattern);
-
-    // Search in trips
     searchClauses.push('tr.destination LIKE ?');
     searchValues.push(pattern);
     searchClauses.push('tr.companions LIKE ?');
@@ -167,7 +146,6 @@ export function searchItems(params: {
   const searchWhere =
     searchClauses.length > 0 ? `(${searchClauses.join(' OR ')})` : '1=1';
 
-  // Category filter: items that are tasks and have a matching category
   if (params.category) {
     const catPattern = `%${params.category}%`;
     conditions.push(
@@ -179,7 +157,9 @@ export function searchItems(params: {
   const finalWhere =
     conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : 'WHERE 1=1';
 
-  // Count total matching items (before pagination)
+  const allValues = [...values, ...searchValues];
+
+  // Count total matching items
   const countSql = `
     SELECT COUNT(*) as total
     FROM items i
@@ -191,9 +171,8 @@ export function searchItems(params: {
     ${finalWhere} AND ${searchWhere}
   `;
 
-  const allValues = [...values, ...searchValues];
-  const countRow = db.prepare(countSql).get(...allValues) as { total: number };
-  const total = countRow.total;
+  const countResult = await client.execute({ sql: countSql, args: allValues });
+  const total = (countResult.rows[0].total as number) || 0;
 
   const sql = `
     SELECT i.id, i.type, i.status, i.created_at, i.updated_at, i.pinned,
@@ -221,26 +200,19 @@ export function searchItems(params: {
     LIMIT ? OFFSET ?
   `;
 
-  const rows = db.prepare(sql).all(...allValues, limit, offset) as Record<string, unknown>[];
+  const rowsResult = await client.execute({
+    sql,
+    args: [...allValues, limit, offset],
+  });
+  const rows = rowsResult.rows;
 
   // Get tags for all matching items
   const itemIds = rows.map((r) => r.id as string);
   const tagsMap = new Map<string, string[]>();
   if (itemIds.length > 0) {
-    const placeholders = itemIds.map(() => '?').join(',');
-    const tagRows = db
-      .prepare(
-        `SELECT it.item_id, t.name
-         FROM item_tags it
-         JOIN tags t ON t.id = it.tag_id
-         WHERE it.item_id IN (${placeholders})
-         ORDER BY t.name`,
-      )
-      .all(...itemIds) as { item_id: string; name: string }[];
-    for (const tr of tagRows) {
-      const tags = tagsMap.get(tr.item_id) || [];
-      tags.push(tr.name);
-      tagsMap.set(tr.item_id, tags);
+    const fetched = await getTagsForItems(itemIds);
+    for (const [key, val] of fetched) {
+      tagsMap.set(key, val);
     }
   }
 
@@ -249,10 +221,9 @@ export function searchItems(params: {
 
   for (const row of rows) {
     const type = row.type as string;
-    const flat = flattenDetailColumns(row, type);
+    const flat = flattenDetailColumns({ ...row }, type);
     const score = computeMatchScore(flat, terms);
 
-    // Build todo and processMemo (simplified — reuse the field lists from item model)
     const todo: Record<string, unknown> = {};
     const processMemo: Record<string, unknown> = {};
 
@@ -284,7 +255,6 @@ export function searchItems(params: {
     });
   }
 
-  // Sort by matchScore descending
   results.sort((a, b) => b.matchScore - a.matchScore);
 
   return {
@@ -302,7 +272,6 @@ export function searchItems(params: {
 function computeMatchScore(flat: Record<string, unknown>, terms: string[]): number {
   let score = 0;
 
-  // Fields that are more important get higher weight
   const highWeightFields = ['name', 'title', 'item_name', 'destination'];
   const mediumWeightFields = [
     'description', 'problem', 'experience', 'knowledge', 'note',
@@ -314,7 +283,6 @@ function computeMatchScore(flat: Record<string, unknown>, terms: string[]): numb
     const lowerTerm = term.toLowerCase();
     let termScore = 0;
 
-    // Check high-weight fields (2 points each)
     for (const field of highWeightFields) {
       const value = flat[field];
       if (typeof value === 'string' && value.toLowerCase().includes(lowerTerm)) {
@@ -322,7 +290,6 @@ function computeMatchScore(flat: Record<string, unknown>, terms: string[]): numb
       }
     }
 
-    // Check medium-weight fields (1 point each)
     for (const field of mediumWeightFields) {
       const value = flat[field];
       if (typeof value === 'string' && value.toLowerCase().includes(lowerTerm)) {
@@ -330,7 +297,6 @@ function computeMatchScore(flat: Record<string, unknown>, terms: string[]): numb
       }
     }
 
-    // Check ID field
     if (typeof flat['id'] === 'string' && flat['id'].toLowerCase().includes(lowerTerm)) {
       termScore += 1;
     }

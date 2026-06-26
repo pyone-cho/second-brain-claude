@@ -12,7 +12,7 @@ const router = Router();
  * Optionally filter by type, status, category, date range, pinned status.
  * Returns array of matching items with a `matchScore` computed field.
  */
-router.get('/', (req, res, next) => {
+router.get('/', async (req, res, next) => {
   try {
     const q = req.query.q as string | undefined;
     if (!q || q.trim() === '') {
@@ -22,7 +22,7 @@ router.get('/', (req, res, next) => {
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : undefined;
 
-    const results = searchItems({
+    const results = await searchItems({
       q,
       type: req.query.type as string | undefined,
       status: req.query.status as string | undefined,
@@ -32,7 +32,7 @@ router.get('/', (req, res, next) => {
       pinned: req.query.pinned as string | undefined,
       limit,
       offset,
-    });
+    }, req.userId!);
 
     res.json(results);
   } catch (err) {

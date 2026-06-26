@@ -2,37 +2,9 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User } from '@/types/auth';
 import { useAppStore } from './index';
+import { apiLogin, apiRegister } from '@/api/client';
 
 // ── Helpers ───────────────────────────────────────────────────
-
-function mockJwtToken(userId: string): string {
-  const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const payload = btoa(
-    JSON.stringify({
-      sub: userId,
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 86400,
-    })
-  );
-  const signature = Array.from({ length: 32 }, () =>
-    Math.floor(Math.random() * 16).toString(16)
-  ).join('');
-  return `${header}.${payload}.${signature}`;
-}
-
-/**
- * Simple hash for mock password storage.
- * NOT cryptographically secure — for demo purposes only.
- */
-function hashPassword(password: string): string {
-  let hash = 0;
-  for (let i = 0; i < password.length; i++) {
-    const char = password.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-  return `mock-${Math.abs(hash).toString(36)}`;
-}
 
 function validateEmail(email: string): string | null {
   const trimmed = email.trim();
@@ -48,10 +20,6 @@ function validatePassword(password: string): string | null {
   return null;
 }
 
-function mockDelay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 // ── Store interface ───────────────────────────────────────────
 
 interface AuthStore {
@@ -60,8 +28,6 @@ interface AuthStore {
   token: string | null;
   isLoading: boolean;
   error: string | null;
-  // Stored password hash for mock validation (persisted in localStorage)
-  _passwordHash: string | null;
 
   // Computed (via get)
   isAuthenticated: () => boolean;
@@ -86,7 +52,6 @@ export const useAuthStore = create<AuthStore>()(
       token: null,
       isLoading: false,
       error: null,
-      _passwordHash: null,
 
       isAuthenticated: () => {
         const state = get();
@@ -97,8 +62,6 @@ export const useAuthStore = create<AuthStore>()(
         set({ isLoading: true, error: null });
 
         try {
-          await mockDelay(800);
-
           const emailError = validateEmail(email);
           if (emailError) {
             set({ isLoading: false, error: emailError });
@@ -111,44 +74,19 @@ export const useAuthStore = create<AuthStore>()(
             return { success: false, error: passwordError };
           }
 
-          // Check if password matches stored hash
-          const state = get();
-          const trimmedEmailForCheck = email.trim().toLowerCase();
-          const inputHash = hashPassword(password);
-
-          if (state._passwordHash) {
-            // We have a stored password — validate against it
-            // The stored user email must match (or be null if just logged out)
-            if (state.user?.email && state.user.email !== trimmedEmailForCheck) {
-              // Different email than registered — reject
-              set({ isLoading: false, error: 'Invalid email or password' });
-              return { success: false, error: 'Invalid email or password' };
-            }
-            if (inputHash !== state._passwordHash) {
-              set({ isLoading: false, error: 'Invalid email or password' });
-              return { success: false, error: 'Invalid email or password' };
-            }
-          } else {
-            // No stored password hash — auto-register on first login (makes demo credentials work)
-            const passwordHash = hashPassword(password);
-            set({ _passwordHash: passwordHash });
-          }
-
-          const trimmedEmail = email.trim().toLowerCase();
-          const nameFromEmail = trimmedEmail.split('@')[0].replace(/[^a-zA-Z0-9]/g, ' ');
-          const displayName =
-            nameFromEmail.charAt(0).toUpperCase() + nameFromEmail.slice(1);
+          const data = await apiLogin(email.trim().toLowerCase(), password);
 
           const user: User = {
-            id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-            name: displayName,
-            email: trimmedEmail,
-            avatar: undefined,
+            id: data.user.id,
+            name: data.user.name,
+            email: data.user.email,
           };
 
-          const token = mockJwtToken(user.id);
+          set({ user, token: data.token, isLoading: false, error: null });
 
-          set({ user, token, isLoading: false, error: null });
+          // Hydrate app data after login
+          useAppStore.getState().hydrate();
+
           return { success: true };
         } catch (err) {
           const message =
@@ -162,8 +100,6 @@ export const useAuthStore = create<AuthStore>()(
         set({ isLoading: true, error: null });
 
         try {
-          await mockDelay(800);
-
           const trimmedName = name.trim();
           if (!trimmedName) {
             set({ isLoading: false, error: 'Name is required' });
@@ -182,19 +118,19 @@ export const useAuthStore = create<AuthStore>()(
             return { success: false, error: passwordError };
           }
 
-          const trimmedEmail = email.trim().toLowerCase();
+          const data = await apiRegister(trimmedName, email.trim().toLowerCase(), password);
 
           const user: User = {
-            id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-            name: trimmedName,
-            email: trimmedEmail,
-            avatar: undefined,
+            id: data.user.id,
+            name: data.user.name,
+            email: data.user.email,
           };
 
-          const token = mockJwtToken(user.id);
-          const passwordHash = hashPassword(password);
+          set({ user, token: data.token, isLoading: false, error: null });
 
-          set({ user, token, _passwordHash: passwordHash, isLoading: false, error: null });
+          // Hydrate app data after registration
+          useAppStore.getState().hydrate();
+
           return { success: true };
         } catch (err) {
           const message =
@@ -206,7 +142,6 @@ export const useAuthStore = create<AuthStore>()(
 
       logout: () => {
         set({ user: null, token: null, isLoading: false, error: null });
-        // Note: _passwordHash is intentionally NOT cleared — needed to validate next login
         // Clear app data to prevent data leakage between users
         useAppStore.setState({
           items: [],
@@ -228,11 +163,10 @@ export const useAuthStore = create<AuthStore>()(
     }),
     {
       name: 'second-brain-auth',
-      version: 1,
+      version: 2,
       partialize: (state) => ({
         user: state.user,
         token: state.token,
-        _passwordHash: state._passwordHash,
       }),
     }
   )

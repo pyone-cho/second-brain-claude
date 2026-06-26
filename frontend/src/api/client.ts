@@ -1,5 +1,6 @@
 /**
  * Real API client — talks to the Express backend at /api/*.
+ * Attaches JWT auth token to all requests.
  */
 import type {
   AnyItem,
@@ -13,11 +14,54 @@ const API_BASE = '/api';
 
 // ── Helpers ─────────────────────────────────────────────────
 
+/**
+ * Get the auth token from localStorage (persisted by zustand).
+ */
+function getAuthToken(): string | null {
+  try {
+    const raw = localStorage.getItem('second-brain-auth');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.state?.token || null;
+  } catch {
+    return null;
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getAuthToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...init?.headers as Record<string, string>,
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
     ...init,
+    headers,
   });
+
+  if (res.status === 401) {
+    // Token expired or invalid — clear auth state
+    try {
+      const raw = localStorage.getItem('second-brain-auth');
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (data?.state) {
+          data.state.user = null;
+          data.state.token = null;
+          localStorage.setItem('second-brain-auth', JSON.stringify(data));
+        }
+      }
+    } catch { /* ignore */ }
+    // Redirect to login
+    window.location.href = '/login';
+    throw new Error('Session expired. Please log in again.');
+  }
+
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `API error: ${res.status}`);
@@ -113,6 +157,34 @@ function mapItem(raw: Record<string, unknown>): AnyItem {
     default:
       return { ...base, todo, processMemo: pm } as unknown as AnyItem;
   }
+}
+
+// ── Auth ────────────────────────────────────────────────────
+
+export interface AuthResponse {
+  user: { id: string; name: string; email: string };
+  token: string;
+}
+
+export async function apiRegister(
+  name: string,
+  email: string,
+  password: string,
+): Promise<AuthResponse> {
+  return request<AuthResponse>('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ name, email, password }),
+  });
+}
+
+export async function apiLogin(
+  email: string,
+  password: string,
+): Promise<AuthResponse> {
+  return request<AuthResponse>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
 }
 
 // ── Items ───────────────────────────────────────────────────

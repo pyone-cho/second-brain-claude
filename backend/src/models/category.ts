@@ -1,4 +1,5 @@
-import db from '../db.js';
+import type { InArgs } from '@libsql/client';
+import client from '../db.js';
 
 export interface Category {
   id: number;
@@ -8,39 +9,50 @@ export interface Category {
   created_at: string;
 }
 
-export function getCategories(): Category[] {
-  return db.prepare('SELECT * FROM categories ORDER BY name').all() as Category[];
+export async function getCategories(userId: string): Promise<Category[]> {
+  const result = await client.execute({
+    sql: 'SELECT * FROM categories WHERE user_id = ? ORDER BY name',
+    args: [userId],
+  });
+  return result.rows as unknown as Category[];
 }
 
-export function getCategoryById(id: number): Category | null {
-  const row = db.prepare('SELECT * FROM categories WHERE id = ?').get(id) as Category | undefined;
-  return row || null;
+export async function getCategoryById(id: number, userId: string): Promise<Category | null> {
+  const result = await client.execute({
+    sql: 'SELECT * FROM categories WHERE id = ? AND user_id = ?',
+    args: [id, userId],
+  });
+  if (result.rows.length === 0) return null;
+  return result.rows[0] as unknown as Category;
 }
 
-export function createCategory(input: {
+export async function createCategory(input: {
   name: string;
   color?: string;
   icon?: string;
-}): Category {
-  const result = db
-    .prepare('INSERT INTO categories (name, color, icon) VALUES (?, ?, ?)')
-    .run(input.name, input.color || null, input.icon || null);
+}, userId: string): Promise<Category> {
+  const result = await client.execute({
+    sql: 'INSERT INTO categories (name, color, icon, user_id) VALUES (?, ?, ?, ?)',
+    args: [input.name, input.color || null, input.icon || null, userId],
+  });
 
-  const category = db
-    .prepare('SELECT * FROM categories WHERE id = ?')
-    .get(result.lastInsertRowid) as Category;
-  return category;
+  const category = await client.execute({
+    sql: 'SELECT * FROM categories WHERE id = ? AND user_id = ?',
+    args: [Number(result.lastInsertRowid), userId],
+  });
+  return category.rows[0] as unknown as Category;
 }
 
-export function updateCategory(
+export async function updateCategory(
   id: number,
   input: { name?: string; color?: string | null; icon?: string | null },
-): Category | null {
-  const existing = getCategoryById(id);
+  userId: string,
+): Promise<Category | null> {
+  const existing = await getCategoryById(id, userId);
   if (!existing) return null;
 
   const updates: string[] = [];
-  const values: unknown[] = [];
+  const values: (string | number | null)[] = [];
 
   if (input.name !== undefined) {
     updates.push('name = ?');
@@ -57,12 +69,40 @@ export function updateCategory(
 
   if (updates.length === 0) return existing;
 
-  db.prepare(`UPDATE categories SET ${updates.join(', ')} WHERE id = ?`).run(...values, id);
+  await client.execute({
+    sql: `UPDATE categories SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`,
+    args: [...values, id, userId],
+  });
 
-  return getCategoryById(id);
+  return getCategoryById(id, userId);
 }
 
-export function deleteCategory(id: number): boolean {
-  const result = db.prepare('DELETE FROM categories WHERE id = ?').run(id);
-  return result.changes > 0;
+export async function deleteCategory(id: number, userId: string): Promise<boolean> {
+  const result = await client.execute({
+    sql: 'DELETE FROM categories WHERE id = ? AND user_id = ?',
+    args: [id, userId],
+  });
+  return result.rowsAffected > 0;
+}
+
+/**
+ * Create default categories for a new user.
+ */
+export async function seedDefaultCategories(userId: string): Promise<void> {
+  const defaults = [
+    { name: 'Work', color: '#3b82f6', icon: 'briefcase' },
+    { name: 'Personal', color: '#10b981', icon: 'user' },
+    { name: 'Learning', color: '#f59e0b', icon: 'book-open' },
+    { name: 'Health', color: '#ef4444', icon: 'heart' },
+    { name: 'Finance', color: '#8b5cf6', icon: 'dollar-sign' },
+    { name: 'Home', color: '#ec4899', icon: 'home' },
+    { name: 'Travel', color: '#06b6d4', icon: 'map' },
+  ];
+
+  const stmts = defaults.map((cat) => ({
+    sql: 'INSERT INTO categories (name, color, icon, user_id) VALUES (?, ?, ?, ?)',
+    args: [cat.name, cat.color, cat.icon, userId] as InArgs,
+  }));
+
+  await client.batch(stmts, 'write');
 }

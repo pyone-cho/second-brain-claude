@@ -1,4 +1,4 @@
-import db from '../db.js';
+import client from '../db.js';
 import type { ItemType } from '../middleware/validate.js';
 
 // ---------------------------------------------------------------------------
@@ -112,25 +112,24 @@ export function flattenDetailColumns(
 /**
  * Fetch tags for a batch of item IDs. Returns a map of itemId -> tag names.
  */
-export function getTagsForItems(itemIds: string[]): Map<string, string[]> {
+export async function getTagsForItems(itemIds: string[]): Promise<Map<string, string[]>> {
   if (itemIds.length === 0) return new Map();
 
   const placeholders = itemIds.map(() => '?').join(',');
-  const rows = db
-    .prepare(
-      `SELECT it.item_id, t.name
-       FROM item_tags it
-       JOIN tags t ON t.id = it.tag_id
-       WHERE it.item_id IN (${placeholders})
-       ORDER BY t.name`,
-    )
-    .all(...itemIds) as { item_id: string; name: string }[];
+  const result = await client.execute({
+    sql: `SELECT it.item_id, t.name
+          FROM item_tags it
+          JOIN tags t ON t.id = it.tag_id
+          WHERE it.item_id IN (${placeholders})
+          ORDER BY t.name`,
+    args: itemIds,
+  });
 
   const map = new Map<string, string[]>();
-  for (const row of rows) {
-    const tags = map.get(row.item_id) || [];
-    tags.push(row.name);
-    map.set(row.item_id, tags);
+  for (const row of result.rows) {
+    const tags = map.get(row.item_id as string) || [];
+    tags.push(row.name as string);
+    map.set(row.item_id as string, tags);
   }
   return map;
 }

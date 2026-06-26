@@ -16,16 +16,15 @@ const router = Router();
  * GET /api/items?status=&type=
  * Returns all items with optional status and type filters.
  */
-router.get('/', (req, res, next) => {
+router.get('/', async (req, res, next) => {
   try {
     const status = req.query.status as string | undefined;
     const type = req.query.type as string | undefined;
 
-    // Validate filters if provided
     if (status) validateStatus(status);
     if (type) validateType(type);
 
-    const items = getItems({ status, type });
+    const items = await getItems({ status, type }, req.userId!);
     res.json({ data: items });
   } catch (err) {
     next(err);
@@ -36,14 +35,14 @@ router.get('/', (req, res, next) => {
  * GET /api/items/:id
  * Returns a single item by its UUID.
  */
-router.get('/:id', (req, res, next) => {
+router.get('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
     if (!id || id.trim() === '') {
       throw new AppError(400, 'Missing item ID');
     }
 
-    const item = getItemById(id);
+    const item = await getItemById(id, req.userId!);
     if (!item) {
       throw new AppError(404, 'Item not found');
     }
@@ -60,7 +59,7 @@ router.get('/:id', (req, res, next) => {
  * Required: type
  * Optional: status, pinned, tags, and type-specific detail fields
  */
-router.post('/', (req, res, next) => {
+router.post('/', async (req, res, next) => {
   try {
     const { type } = req.body;
     if (!type) {
@@ -68,7 +67,7 @@ router.post('/', (req, res, next) => {
     }
     validateType(type);
 
-    const item = createItem(req.body);
+    const item = await createItem(req.body, req.userId!);
     res.status(201).json({ data: item });
   } catch (err) {
     next(err);
@@ -79,20 +78,19 @@ router.post('/', (req, res, next) => {
  * PUT /api/items/:id
  * Full or partial update of an item.  Updates updated_at automatically.
  */
-router.put('/:id', (req, res, next) => {
+router.put('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
     if (!id || id.trim() === '') {
       throw new AppError(400, 'Missing item ID');
     }
 
-    // Validate status if it's being updated
     if (req.body.status !== undefined) {
       validateStatus(req.body.status);
     }
 
     try {
-      const item = updateItem(id, req.body);
+      const item = await updateItem(id, req.body, req.userId!);
       res.json({ data: item });
     } catch (err: unknown) {
       if (err instanceof Error && err.message === 'NOT_FOUND') {
@@ -109,14 +107,14 @@ router.put('/:id', (req, res, next) => {
  * DELETE /api/items/:id
  * Deletes an item and all related rows (CASCADE).
  */
-router.delete('/:id', (req, res, next) => {
+router.delete('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
     if (!id || id.trim() === '') {
       throw new AppError(400, 'Missing item ID');
     }
 
-    const deleted = deleteItem(id);
+    const deleted = await deleteItem(id, req.userId!);
     if (!deleted) {
       throw new AppError(404, 'Item not found');
     }
@@ -131,7 +129,7 @@ router.delete('/:id', (req, res, next) => {
  * PATCH /api/items/:id/status
  * Moves an item between lifecycle stages (todo, process, memo).
  */
-router.patch('/:id/status', (req, res, next) => {
+router.patch('/:id/status', async (req, res, next) => {
   try {
     const { id } = req.params;
     if (!id || id.trim() === '') {
@@ -146,7 +144,7 @@ router.patch('/:id/status', (req, res, next) => {
     const validStatus = validateStatus(status);
 
     try {
-      const item = updateItemStatus(id, validStatus);
+      const item = await updateItemStatus(id, validStatus, req.userId!);
       res.json({ data: item });
     } catch (err: unknown) {
       if (err instanceof Error && err.message === 'NOT_FOUND') {

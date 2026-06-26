@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import db from '../db.js';
+import client from '../db.js';
 
 const router = Router();
 
@@ -11,35 +11,35 @@ const router = Router();
  * - Books to read count
  * - Upcoming trips count
  */
-router.get('/', (_req, res, next) => {
+router.get('/', async (req, res, next) => {
   try {
+    const userId = req.userId!;
+
     // Counts by status
-    const statusCounts = db
-      .prepare(
-        `SELECT status, COUNT(*) as count FROM items GROUP BY status`,
-      )
-      .all() as { status: string; count: number }[];
+    const statusResult = await client.execute({
+      sql: `SELECT status, COUNT(*) as count FROM items WHERE user_id = ? GROUP BY status`,
+      args: [userId],
+    });
 
     let totalTodo = 0;
     let totalProcess = 0;
     let totalMemo = 0;
 
-    for (const row of statusCounts) {
-      if (row.status === 'todo') totalTodo = row.count;
-      else if (row.status === 'process') totalProcess = row.count;
-      else if (row.status === 'memo') totalMemo = row.count;
+    for (const row of statusResult.rows) {
+      if (row.status === 'todo') totalTodo = row.count as number;
+      else if (row.status === 'process') totalProcess = row.count as number;
+      else if (row.status === 'memo') totalMemo = row.count as number;
     }
 
     // Counts by type
-    const typeCounts = db
-      .prepare(
-        `SELECT type, COUNT(*) as count FROM items GROUP BY type`,
-      )
-      .all() as { type: string; count: number }[];
+    const typeResult = await client.execute({
+      sql: `SELECT type, COUNT(*) as count FROM items WHERE user_id = ? GROUP BY type`,
+      args: [userId],
+    });
 
     const byType: Record<string, number> = {};
-    for (const row of typeCounts) {
-      byType[row.type] = row.count;
+    for (const row of typeResult.rows) {
+      byType[row.type as string] = row.count as number;
     }
 
     // Ensure all types are represented (even if 0)
@@ -58,22 +58,18 @@ router.get('/', (_req, res, next) => {
     }
 
     // Books to read: count of reading-book items with status 'todo'
-    const booksToRead = (
-      db
-        .prepare(
-          `SELECT COUNT(*) as count FROM items WHERE type = 'reading-book' AND status = 'todo'`,
-        )
-        .get() as { count: number }
-    ).count;
+    const booksResult = await client.execute({
+      sql: `SELECT COUNT(*) as count FROM items WHERE type = 'reading-book' AND status = 'todo' AND user_id = ?`,
+      args: [userId],
+    });
+    const booksToRead = (booksResult.rows[0].count as number) || 0;
 
     // Upcoming trips: count of trip items with status 'todo'
-    const upcomingTrips = (
-      db
-        .prepare(
-          `SELECT COUNT(*) as count FROM items WHERE type = 'trip' AND status = 'todo'`,
-        )
-        .get() as { count: number }
-    ).count;
+    const tripsResult = await client.execute({
+      sql: `SELECT COUNT(*) as count FROM items WHERE type = 'trip' AND status = 'todo' AND user_id = ?`,
+      args: [userId],
+    });
+    const upcomingTrips = (tripsResult.rows[0].count as number) || 0;
 
     res.json({
       data: {

@@ -3,7 +3,7 @@ import { AppError } from '../middleware/errorHandler.js';
 import { getItems } from '../models/item.js';
 import { validateInfraType } from '../middleware/validate.js';
 import { getTagsForItems } from '../utils/itemFields.js';
-import db from '../db.js';
+import client from '../db.js';
 import type { FullItem } from '../models/item.js';
 
 /**
@@ -19,7 +19,7 @@ const router = Router();
  * GET /api/it-infra?infra=server|network|cloud
  * Returns only items of type `task-it-infra`, optionally filtered by infra type.
  */
-router.get('/', (req, res, next) => {
+router.get('/', async (req, res, next) => {
   try {
     const infra = req.query.infra as string | undefined;
 
@@ -27,8 +27,8 @@ router.get('/', (req, res, next) => {
       validateInfraType(infra);
     }
 
-    // Get all task-it-infra items
-    let items = getItems({ type: 'task-it-infra' });
+    // Get all task-it-infra items for this user
+    let items = await getItems({ type: 'task-it-infra' }, req.userId!);
 
     // Filter by infra type if requested
     if (infra) {
@@ -46,9 +46,8 @@ router.get('/', (req, res, next) => {
 /**
  * GET /api/it-infra/search?q=xxx
  * Search IT infra items by IP address, item name, infra type, kind, or description.
- * Searches across url_ip, item_name, infra, kind, description columns.
  */
-router.get('/search', (req, res, next) => {
+router.get('/search', async (req, res, next) => {
   try {
     const q = req.query.q as string | undefined;
     if (!q || q.trim() === '') {
@@ -56,6 +55,7 @@ router.get('/search', (req, res, next) => {
     }
 
     const pattern = `%${escapeLike(q.trim())}%`;
+    const userId = req.userId!;
 
     const sql = `
       SELECT i.*,
@@ -64,25 +64,28 @@ router.get('/search', (req, res, next) => {
         ti.username, ti.password, ti.new_password, ti.remark
       FROM items i
       JOIN tasks_it_infra ti ON i.id = ti.item_id
-      WHERE ti.url_ip LIKE ?
+      WHERE i.user_id = ?
+        AND (ti.url_ip LIKE ?
          OR ti.item_name LIKE ?
          OR ti.infra LIKE ?
          OR ti.kind LIKE ?
          OR ti.description LIKE ?
          OR ti.name LIKE ?
          OR ti.remark LIKE ?
-         OR ti.category LIKE ?
+         OR ti.category LIKE ?)
       ORDER BY i.updated_at DESC
       LIMIT 100
     `;
 
-    const rows = db.prepare(sql).all(
-      pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern,
-    ) as Record<string, unknown>[];
+    const result = await client.execute({
+      sql,
+      args: [userId, pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern],
+    });
+    const rows = result.rows;
 
     // Fetch tags for these items
     const itemIds = rows.map((r) => r.id as string);
-    const tagsMap = getTagsForItems(itemIds);
+    const tagsMap = await getTagsForItems(itemIds);
 
     const items = rows.map((row) => ({
       id: row.id,

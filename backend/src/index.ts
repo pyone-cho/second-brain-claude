@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import { runMigrations } from './db.js';
 import { errorHandler, AppError } from './middleware/errorHandler.js';
+import { authMiddleware } from './middleware/auth.js';
+import authRouter from './routes/auth.js';
 import itemsRouter from './routes/items.js';
 import categoriesRouter from './routes/categories.js';
 import itInfraRouter from './routes/itInfra.js';
@@ -33,7 +35,6 @@ app.use((req, res, next) => {
   const start = Date.now();
   const { method, path } = req;
 
-  // Hook into response finish to log duration
   res.on('finish', () => {
     const duration = Date.now() - start;
     console.log(`[${new Date().toISOString()}] ${method} ${path} ${res.statusCode} ${duration}ms`);
@@ -46,11 +47,15 @@ app.use((req, res, next) => {
 // Routes
 // ---------------------------------------------------------------------------
 
-app.use('/api/items', itemsRouter);
-app.use('/api/categories', categoriesRouter);
-app.use('/api/it-infra', itInfraRouter);
-app.use('/api/search', searchRouter);
-app.use('/api/stats', statsRouter);
+// Public routes (no auth required)
+app.use('/api/auth', authRouter);
+
+// Protected routes (require valid JWT)
+app.use('/api/items', authMiddleware, itemsRouter);
+app.use('/api/categories', authMiddleware, categoriesRouter);
+app.use('/api/it-infra', authMiddleware, itInfraRouter);
+app.use('/api/search', authMiddleware, searchRouter);
+app.use('/api/stats', authMiddleware, statsRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -61,25 +66,29 @@ app.get('/api/health', (_req, res) => {
 // Error handling
 // ---------------------------------------------------------------------------
 
-// Catch-all for unmatched routes
 app.use((_req, _res, next) => {
   next(new AppError(404, 'Route not found'));
 });
 
-// Global error handler (must be last middleware)
 app.use(errorHandler);
 
 // ---------------------------------------------------------------------------
 // Start server
 // ---------------------------------------------------------------------------
 
-// Run migrations before starting
-runMigrations();
-console.log('[DB] Migrations complete.');
+async function main() {
+  await runMigrations();
+  console.log('[DB] Migrations complete.');
 
-app.listen(PORT, () => {
-  console.log(`[Server] Second Brain API running on http://localhost:${PORT}`);
-  console.log(`[Server] CORS enabled for ${CORS_ORIGIN}`);
+  app.listen(PORT, () => {
+    console.log(`[Server] Second Brain API running on http://localhost:${PORT}`);
+    console.log(`[Server] CORS enabled for ${CORS_ORIGIN}`);
+  });
+}
+
+main().catch((err) => {
+  console.error('[Server] Failed to start:', err);
+  process.exit(1);
 });
 
 export default app;
