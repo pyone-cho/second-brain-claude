@@ -168,6 +168,24 @@ export const useAuthStore = create<AuthStore>()(
         user: state.user,
         token: state.token,
       }),
+      migrate: (persistedState: unknown, version: number) => {
+        // v1 → v2: shape is identical, just pass through
+        if (version < 2) {
+          return persistedState as AuthStore;
+        }
+        return persistedState as AuthStore;
+      },
     }
   )
 );
+
+// ── Listen for session-expired events from the API client ───────
+// The API client dispatches this on 401 so we clear in-memory state
+// without a hard page reload (which would cause a redirect loop).
+if (typeof window !== 'undefined') {
+  window.addEventListener('auth:session-expired', () => {
+    useAuthStore.getState().logout();
+    // Navigate via React Router-compatible path
+    window.location.assign('/login');
+  });
+}

@@ -45,7 +45,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (res.status === 401) {
-    // Token expired or invalid — clear auth state
+    // Token expired or invalid — clear persisted auth state
     try {
       const raw = localStorage.getItem('second-brain-auth');
       if (raw) {
@@ -57,8 +57,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         }
       }
     } catch { /* ignore */ }
-    // Redirect to login
-    window.location.href = '/login';
+    // Notify auth store to clear in-memory state (avoids hard-reload redirect loop)
+    window.dispatchEvent(new Event('auth:session-expired'));
     throw new Error('Session expired. Please log in again.');
   }
 
