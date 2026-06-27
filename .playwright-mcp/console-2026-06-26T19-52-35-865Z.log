@@ -1,2 +1,0 @@
-[     359ms] [ERROR] State loaded from storage couldn't be migrated since no migrate function was provided @ https://second-brain-claude.vercel.app/assets/index-2ro7Lr_Q.js:83
-[  207686ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://second-brain-claude.vercel.app/api/auth/login:0
