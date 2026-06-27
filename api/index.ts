@@ -255,6 +255,10 @@ declare global {
   }
 }
 
+function uid(req: express.Request): string {
+  return req.userId as string;
+}
+
 function authenticate(req: express.Request, res: express.Response, next: express.NextFunction) {
   const header = req.headers.authorization;
   if (!header || !header.startsWith('Bearer ')) {
@@ -411,7 +415,7 @@ app.get('/api/auth/me', authenticate, async (req, res) => {
   try {
     const result = await db.execute({
       sql: 'SELECT id, name, email FROM users WHERE id = ?',
-      args: [req.userId],
+      args: [uid(req)],
     });
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     res.json({ data: { user: result.rows[0] } });
@@ -427,7 +431,7 @@ app.get('/api/items', authenticate, async (req, res) => {
     const status = req.query.status as string;
     const type = req.query.type as string;
     const conditions: string[] = ['i.user_id = ?'];
-    const values: any[] = [req.userId];
+    const values: any[] = [uid(req)];
     if (status) { conditions.push('i.status = ?'); values.push(status); }
     if (type) { conditions.push('i.type = ?'); values.push(type); }
     const where = `WHERE ${conditions.join(' AND ')}`;
@@ -449,7 +453,7 @@ app.get('/api/items', authenticate, async (req, res) => {
 
 app.get('/api/items/:id', authenticate, async (req, res) => {
   try {
-    const item = await getItemById(req.params.id, req.userId!);
+    const item = await getItemById(req.params.id, uid(req));
     if (!item) return res.status(404).json({ error: 'Item not found' });
     res.json({ data: item });
   } catch (err: any) {
@@ -496,7 +500,7 @@ app.post('/api/items', authenticate, async (req, res) => {
     }
 
     const statements = [
-      { sql: `INSERT INTO items (id, type, status, pinned, user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`, args: [id, type, itemStatus, pinnedVal, req.userId, now, now] },
+      { sql: `INSERT INTO items (id, type, status, pinned, user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`, args: [id, type, itemStatus, pinnedVal, uid(req), now, now] },
       { sql: `INSERT INTO ${detailTable} (${detailCols.join(', ')}) VALUES (${detailPlaceholders.join(', ')})`, args: detailValues },
     ];
 
@@ -517,7 +521,7 @@ app.post('/api/items', authenticate, async (req, res) => {
       }
     }
 
-    const item = await getItemById(id, req.userId!);
+    const item = await getItemById(id, uid(req));
     res.status(201).json({ data: item });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -527,7 +531,7 @@ app.post('/api/items', authenticate, async (req, res) => {
 app.put('/api/items/:id', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
-    const existing = await getItemById(id, req.userId!);
+    const existing = await getItemById(id, uid(req));
     if (!existing) return res.status(404).json({ error: 'Item not found' });
 
     const { status, pinned, tags, ...rest } = req.body;
@@ -551,7 +555,7 @@ app.put('/api/items/:id', authenticate, async (req, res) => {
     }
 
     const statements: any[] = [
-      { sql: `UPDATE items SET ${itemUpdates.join(', ')} WHERE id = ? AND user_id = ?`, args: [...itemValues, id, req.userId] },
+      { sql: `UPDATE items SET ${itemUpdates.join(', ')} WHERE id = ? AND user_id = ?`, args: [...itemValues, id, uid(req)] },
     ];
     if (detailUpdates.length > 0) {
       statements.push({ sql: `UPDATE ${detailTable} SET ${detailUpdates.join(', ')} WHERE item_id = ?`, args: [...detailValues, id] });
@@ -574,7 +578,7 @@ app.put('/api/items/:id', authenticate, async (req, res) => {
       await db.execute('DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM item_tags)');
     }
 
-    const updated = await getItemById(id, req.userId!);
+    const updated = await getItemById(id, uid(req));
     res.json({ data: updated });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -584,7 +588,7 @@ app.put('/api/items/:id', authenticate, async (req, res) => {
 app.delete('/api/items/:id', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await db.execute({ sql: 'DELETE FROM items WHERE id = ? AND user_id = ?', args: [id, req.userId] });
+    const result = await db.execute({ sql: 'DELETE FROM items WHERE id = ? AND user_id = ?', args: [id, uid(req)] });
     if (result.rowsAffected === 0) return res.status(404).json({ error: 'Item not found' });
     res.json({ success: true });
   } catch (err: any) {
@@ -599,12 +603,12 @@ app.patch('/api/items/:id/status', authenticate, async (req, res) => {
     if (!status || !VALID_STATUSES.includes(status)) {
       return res.status(400).json({ error: `Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}` });
     }
-    const existing = await getItemById(id, req.userId!);
+    const existing = await getItemById(id, uid(req));
     if (!existing) return res.status(404).json({ error: 'Item not found' });
 
     const now = new Date().toISOString();
-    await db.execute({ sql: 'UPDATE items SET status = ?, updated_at = ? WHERE id = ? AND user_id = ?', args: [status, now, id, req.userId] });
-    const updated = await getItemById(id, req.userId!);
+    await db.execute({ sql: 'UPDATE items SET status = ?, updated_at = ? WHERE id = ? AND user_id = ?', args: [status, now, id, uid(req)] });
+    const updated = await getItemById(id, uid(req));
     res.json({ data: updated });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -615,9 +619,9 @@ app.patch('/api/items/:id/status', authenticate, async (req, res) => {
 
 app.get('/api/stats', authenticate, async (req, res) => {
   try {
-    const uid = req.userId;
-    const statusResult = await db.execute({ sql: 'SELECT status, COUNT(*) as count FROM items WHERE user_id = ? GROUP BY status', args: [uid] });
-    const typeResult = await db.execute({ sql: 'SELECT type, COUNT(*) as count FROM items WHERE user_id = ? GROUP BY type', args: [uid] });
+    const userId = uid(req);
+    const statusResult = await db.execute({ sql: 'SELECT status, COUNT(*) as count FROM items WHERE user_id = ? GROUP BY status', args: [userId] });
+    const typeResult = await db.execute({ sql: 'SELECT type, COUNT(*) as count FROM items WHERE user_id = ? GROUP BY type', args: [userId] });
 
     let totalTodo = 0, totalProcess = 0, totalMemo = 0;
     for (const row of statusResult.rows as any[]) {
@@ -630,8 +634,8 @@ app.get('/api/stats', authenticate, async (req, res) => {
     for (const row of typeResult.rows as any[]) byType[row.type] = row.count;
     for (const t of VALID_TYPES) { if (!(t in byType)) byType[t] = 0; }
 
-    const booksResult = await db.execute({ sql: "SELECT COUNT(*) as count FROM items WHERE type = 'reading-book' AND status = 'todo' AND user_id = ?", args: [uid] });
-    const tripsResult = await db.execute({ sql: "SELECT COUNT(*) as count FROM items WHERE type = 'trip' AND status = 'todo' AND user_id = ?", args: [uid] });
+    const booksResult = await db.execute({ sql: "SELECT COUNT(*) as count FROM items WHERE type = 'reading-book' AND status = 'todo' AND user_id = ?", args: [userId] });
+    const tripsResult = await db.execute({ sql: "SELECT COUNT(*) as count FROM items WHERE type = 'trip' AND status = 'todo' AND user_id = ?", args: [userId] });
 
     res.json({
       data: {
@@ -649,7 +653,7 @@ app.get('/api/stats', authenticate, async (req, res) => {
 
 app.get('/api/categories', authenticate, async (req, res) => {
   try {
-    const result = await db.execute({ sql: 'SELECT * FROM categories WHERE user_id = ? ORDER BY name', args: [req.userId] });
+    const result = await db.execute({ sql: 'SELECT * FROM categories WHERE user_id = ? ORDER BY name', args: [uid(req)] });
     res.json({ data: result.rows });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -658,7 +662,7 @@ app.get('/api/categories', authenticate, async (req, res) => {
 
 app.get('/api/categories/:id', authenticate, async (req, res) => {
   try {
-    const result = await db.execute({ sql: 'SELECT * FROM categories WHERE id = ? AND user_id = ?', args: [req.params.id, req.userId] });
+    const result = await db.execute({ sql: 'SELECT * FROM categories WHERE id = ? AND user_id = ?', args: [req.params.id, uid(req)] });
     if (result.rows.length === 0) return res.status(404).json({ error: 'Category not found' });
     res.json({ data: result.rows[0] });
   } catch (err: any) {
@@ -674,9 +678,9 @@ app.post('/api/categories', authenticate, async (req, res) => {
     }
     const result = await db.execute({
       sql: 'INSERT INTO categories (name, color, icon, user_id) VALUES (?, ?, ?, ?)',
-      args: [name.trim(), color || null, icon || null, req.userId],
+      args: [name.trim(), color || null, icon || null, uid(req)],
     });
-    const cat = await db.execute({ sql: 'SELECT * FROM categories WHERE id = ? AND user_id = ?', args: [result.lastInsertRowid, req.userId] });
+    const cat = await db.execute({ sql: 'SELECT * FROM categories WHERE id = ? AND user_id = ?', args: [result.lastInsertRowid, uid(req)] });
     res.status(201).json({ data: cat.rows[0] });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -690,7 +694,7 @@ app.put('/api/categories/:id', authenticate, async (req, res) => {
     if (name !== undefined && (typeof name !== 'string' || name.trim() === '')) {
       return res.status(400).json({ error: 'Invalid name: must be a non-empty string' });
     }
-    const existing = await db.execute({ sql: 'SELECT * FROM categories WHERE id = ? AND user_id = ?', args: [id, req.userId] });
+    const existing = await db.execute({ sql: 'SELECT * FROM categories WHERE id = ? AND user_id = ?', args: [id, uid(req)] });
     if (existing.rows.length === 0) return res.status(404).json({ error: 'Category not found' });
 
     const updates: string[] = [];
@@ -700,9 +704,9 @@ app.put('/api/categories/:id', authenticate, async (req, res) => {
     if (icon !== undefined) { updates.push('icon = ?'); values.push(icon); }
 
     if (updates.length > 0) {
-      await db.execute({ sql: `UPDATE categories SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`, args: [...values, id, req.userId] });
+      await db.execute({ sql: `UPDATE categories SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`, args: [...values, id, uid(req)] });
     }
-    const updated = await db.execute({ sql: 'SELECT * FROM categories WHERE id = ? AND user_id = ?', args: [id, req.userId] });
+    const updated = await db.execute({ sql: 'SELECT * FROM categories WHERE id = ? AND user_id = ?', args: [id, uid(req)] });
     res.json({ data: updated.rows[0] });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -711,7 +715,7 @@ app.put('/api/categories/:id', authenticate, async (req, res) => {
 
 app.delete('/api/categories/:id', authenticate, async (req, res) => {
   try {
-    const result = await db.execute({ sql: 'DELETE FROM categories WHERE id = ? AND user_id = ?', args: [req.params.id, req.userId] });
+    const result = await db.execute({ sql: 'DELETE FROM categories WHERE id = ? AND user_id = ?', args: [req.params.id, uid(req)] });
     if (result.rowsAffected === 0) return res.status(404).json({ error: 'Category not found' });
     res.json({ success: true });
   } catch (err: any) {
@@ -731,7 +735,7 @@ app.get('/api/search', authenticate, async (req, res) => {
     const terms = q.trim().split(/\s+/).filter(t => t.length > 0);
 
     const conditions: string[] = ['i.user_id = ?'];
-    const values: any[] = [req.userId];
+    const values: any[] = [uid(req)];
 
     if (req.query.status) { conditions.push('i.status = ?'); values.push(req.query.status); }
     else { conditions.push("i.status = 'memo'"); }
@@ -821,7 +825,7 @@ app.get('/api/it-infra', authenticate, async (req, res) => {
   try {
     const infra = req.query.infra as string;
     const conditions = ["i.type = 'task-it-infra'", 'i.user_id = ?'];
-    const values: any[] = [req.userId];
+    const values: any[] = [uid(req)];
     if (infra) { conditions.push('ti.infra = ?'); values.push(infra); }
 
     const result = await db.execute({
@@ -858,7 +862,7 @@ app.get('/api/it-infra/search', authenticate, async (req, res) => {
          OR ti.kind LIKE ? OR ti.description LIKE ? OR ti.name LIKE ?
          OR ti.remark LIKE ? OR ti.category LIKE ?)
       ORDER BY i.updated_at DESC LIMIT 100`,
-      args: [req.userId, pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern],
+      args: [uid(req), pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern],
     });
 
     const itemIds = result.rows.map((r: any) => r.id);
