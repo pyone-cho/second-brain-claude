@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { useTheme } from '@/hooks/useTheme';
 import { useAppStore } from '@/store';
+import { useAuthStore } from '@/store/authStore';
 import { Layout } from '@/components/layout/Layout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
@@ -40,7 +41,11 @@ export function App() {
   useTheme();
 
   useEffect(() => {
-    useAppStore.getState().hydrate();
+    // Only hydrate if we have a persisted auth token — avoids 401 → redirect loop on /login
+    const { token } = useAuthStore.getState();
+    if (token) {
+      useAppStore.getState().hydrate();
+    }
   }, []);
 
   return (

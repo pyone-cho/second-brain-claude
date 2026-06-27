@@ -185,7 +185,9 @@ export const useAuthStore = create<AuthStore>()(
 if (typeof window !== 'undefined') {
   window.addEventListener('auth:session-expired', () => {
     useAuthStore.getState().logout();
-    // Navigate via React Router-compatible path
-    window.location.assign('/login');
+    // Only hard-navigate if not already on /login (avoids reload loop)
+    if (window.location.pathname !== '/login') {
+      window.location.assign('/login');
+    }
   });
 }
