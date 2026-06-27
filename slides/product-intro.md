@@ -1,12 +1,13 @@
-# Second Brain — Product Intro
-
-> A short slide deck for presenting the product. 4–6 slides, presenter-friendly.
-
+---
+marp: true
+paginate: true
+transition: fade
+size: 16:9
 ---
 
-## Slide 1 — Title
-
+<!-- slide 1 -->
 # Second Brain 🧠
+<!-- 20 -->
 
 **A personal knowledge management system**
 
@@ -16,7 +17,9 @@ Capture everything. Process with focus. Archive forever.
 
 ---
 
+<!-- slide 2 -->
 ## Slide 2 — The Problem
+<!-- 20s -->
 
 > _People capture ideas everywhere but lose them everywhere._
 
@@ -31,7 +34,9 @@ Capture everything. Process with focus. Archive forever.
 
 ---
 
+<!-- slide 3 -->
 ## Slide 3 — The Workflow
+<!-- 20s -->
 
 ```
 ┌─────────┐      ┌─────────┐      ┌─────────┐
@@ -46,9 +51,11 @@ Capture everything. Process with focus. Archive forever.
 
 _(Applicable to ALL item types: tasks, reading, purchases, IT infra, trips)_
 
----
 
+---
+<!-- slide 4 -->
 ## Slide 4 — What You Can Track (6 Types)
+<!-- 20s -->
 
 | Type | Example |
 |---|---|
@@ -62,7 +69,9 @@ Every type has **custom fields** at each lifecycle stage.
 
 ---
 
+<!-- slide 5 -->
 ## Slide 5 — Key Features
+<!-- 20s -->
 
 | Feature | Detail |
 |---|---|
@@ -78,7 +87,9 @@ Every type has **custom fields** at each lifecycle stage.
 
 ---
 
+<!-- slide 6 -->
 ## Slide 6 — Tech & Deployment
+<!-- 20s -->
 
 | Layer | Tech |
 |---|---|
@@ -94,14 +105,13 @@ Every type has **custom fields** at each lifecycle stage.
 
 ---
 
+<!-- slide 7 -->
 ## ✋ Thank You
-
+<!-- 20s -->
 **Try it now:**  
 🔗 [second-brain-claude.vercel.app](https://second-brain-claude.vercel.app)
 
 **GitHub:**  
 🐙 [github.com/pyone-cho/second-brain-claude](https://github.com/pyone-cho/second-brain-claude)
-
----
 
 > _Built with React, TypeScript, Express, SQLite & Turso — a personal knowledge base you own._
