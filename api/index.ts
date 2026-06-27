@@ -87,8 +87,8 @@ async function ensureMigrations() {
   }
   await db.batch([
     { sql: `CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')))`, args: [] },
-    { sql: `CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, color TEXT, icon TEXT, created_at TEXT DEFAULT (datetime('now')))`, args: [] },
-    { sql: `CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'todo', pinned INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`, args: [] },
+    { sql: `CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, color TEXT, icon TEXT, user_id TEXT, created_at TEXT DEFAULT (datetime('now')))`, args: [] },
+    { sql: `CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'todo', pinned INTEGER DEFAULT 0, user_id TEXT, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`, args: [] },
     { sql: `CREATE TABLE IF NOT EXISTS tasks_ordinary (item_id TEXT PRIMARY KEY REFERENCES items(id) ON DELETE CASCADE, category TEXT, name TEXT, due_date TEXT, priority TEXT DEFAULT 'medium', problem TEXT, experience TEXT, note TEXT, photo TEXT)`, args: [] },
     { sql: `CREATE TABLE IF NOT EXISTS tasks_it_infra (item_id TEXT PRIMARY KEY REFERENCES items(id) ON DELETE CASCADE, category TEXT, name TEXT, due_date TEXT, priority TEXT DEFAULT 'medium', infra TEXT, item_name TEXT, kind TEXT, description TEXT, url_ip TEXT, username TEXT, password TEXT, new_password TEXT, remark TEXT)`, args: [] },
     { sql: `CREATE TABLE IF NOT EXISTS readings (item_id TEXT PRIMARY KEY REFERENCES items(id) ON DELETE CASCADE, source_type TEXT, title TEXT, author TEXT, url TEXT, priority TEXT DEFAULT 'medium', book_name TEXT, website_name TEXT, event TEXT, knowledge TEXT, note TEXT, book_pdf TEXT, progress INTEGER DEFAULT 0)`, args: [] },
@@ -97,6 +97,11 @@ async function ensureMigrations() {
     { sql: `CREATE TABLE IF NOT EXISTS tags (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE)`, args: [] },
     { sql: `CREATE TABLE IF NOT EXISTS item_tags (item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE, tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE, PRIMARY KEY (item_id, tag_id))`, args: [] },
   ]);
+  // Add user_id column to existing tables (safe if already exists)
+  try { await db.execute('ALTER TABLE items ADD COLUMN user_id TEXT'); } catch {}
+  try { await db.execute('ALTER TABLE categories ADD COLUMN user_id TEXT'); } catch {}
+  await db.execute('CREATE INDEX IF NOT EXISTS idx_items_user_id ON items(user_id)');
+  await db.execute('CREATE INDEX IF NOT EXISTS idx_categories_user_id ON categories(user_id)');
   migrationsDone = true;
 }
 
@@ -221,10 +226,10 @@ function buildFullItem(row: Record<string, unknown>, tags: string[]): Record<str
   };
 }
 
-async function getItemById(id: string): Promise<Record<string, unknown> | null> {
+async function getItemById(id: string, userId: string): Promise<Record<string, unknown> | null> {
   const result = await db.execute({
-    sql: `${ITEMS_JOIN_SQL} WHERE i.id = ?`,
-    args: [id],
+    sql: `${ITEMS_JOIN_SQL} WHERE i.id = ? AND i.user_id = ?`,
+    args: [id, userId],
   });
   if (result.rows.length === 0) return null;
   const row = result.rows[0] as Record<string, unknown>;
@@ -303,6 +308,21 @@ app.post('/api/auth/register', async (req, res) => {
       args: [id, name.trim(), email.toLowerCase().trim(), passwordHash],
     });
 
+    // Seed default categories for the new user
+    const defaultCategories = [
+      { name: 'Work', color: '#3b82f6', icon: 'briefcase' },
+      { name: 'Personal', color: '#10b981', icon: 'user' },
+      { name: 'Learning', color: '#f59e0b', icon: 'book-open' },
+      { name: 'Health', color: '#ef4444', icon: 'heart' },
+      { name: 'Finance', color: '#8b5cf6', icon: 'dollar-sign' },
+      { name: 'Home', color: '#ec4899', icon: 'home' },
+      { name: 'Travel', color: '#06b6d4', icon: 'map' },
+    ];
+    await db.batch(defaultCategories.map(c => ({
+      sql: 'INSERT INTO categories (name, color, icon, user_id) VALUES (?, ?, ?, ?)',
+      args: [c.name, c.color, c.icon, id],
+    })));
+
     const token = signToken(id);
     res.status(201).json({
       data: {
@@ -346,6 +366,21 @@ app.post('/api/auth/login', async (req, res) => {
         args: [id, name, normalizedEmail, passwordHash],
       });
 
+      // Seed default categories for the new user
+      const defaultCategories = [
+        { name: 'Work', color: '#3b82f6', icon: 'briefcase' },
+        { name: 'Personal', color: '#10b981', icon: 'user' },
+        { name: 'Learning', color: '#f59e0b', icon: 'book-open' },
+        { name: 'Health', color: '#ef4444', icon: 'heart' },
+        { name: 'Finance', color: '#8b5cf6', icon: 'dollar-sign' },
+        { name: 'Home', color: '#ec4899', icon: 'home' },
+        { name: 'Travel', color: '#06b6d4', icon: 'map' },
+      ];
+      await db.batch(defaultCategories.map(c => ({
+        sql: 'INSERT INTO categories (name, color, icon, user_id) VALUES (?, ?, ?, ?)',
+        args: [c.name, c.color, c.icon, id],
+      })));
+
       const token = signToken(id);
       return res.json({
         data: {
@@ -372,17 +407,30 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+app.get('/api/auth/me', authenticate, async (req, res) => {
+  try {
+    const result = await db.execute({
+      sql: 'SELECT id, name, email FROM users WHERE id = ?',
+      args: [req.userId],
+    });
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    res.json({ data: { user: result.rows[0] } });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Items ────────────────────────────────────────────────────
 
-app.get('/api/items', async (req, res) => {
+app.get('/api/items', authenticate, async (req, res) => {
   try {
     const status = req.query.status as string;
     const type = req.query.type as string;
-    const conditions: string[] = [];
-    const values: any[] = [];
+    const conditions: string[] = ['i.user_id = ?'];
+    const values: any[] = [req.userId];
     if (status) { conditions.push('i.status = ?'); values.push(status); }
     if (type) { conditions.push('i.type = ?'); values.push(type); }
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const where = `WHERE ${conditions.join(' AND ')}`;
 
     const result = await db.execute({ sql: `${ITEMS_JOIN_SQL} ${where} ORDER BY i.pinned DESC, i.created_at DESC`, args: values });
     if (result.rows.length === 0) return res.json({ data: [] });
@@ -399,9 +447,9 @@ app.get('/api/items', async (req, res) => {
   }
 });
 
-app.get('/api/items/:id', async (req, res) => {
+app.get('/api/items/:id', authenticate, async (req, res) => {
   try {
-    const item = await getItemById(req.params.id);
+    const item = await getItemById(req.params.id, req.userId!);
     if (!item) return res.status(404).json({ error: 'Item not found' });
     res.json({ data: item });
   } catch (err: any) {
@@ -409,7 +457,7 @@ app.get('/api/items/:id', async (req, res) => {
   }
 });
 
-app.post('/api/items', async (req, res) => {
+app.post('/api/items', authenticate, async (req, res) => {
   try {
     const { type, status, pinned, tags, ...rest } = req.body;
     if (!type || !VALID_TYPES.includes(type)) {
@@ -448,7 +496,7 @@ app.post('/api/items', async (req, res) => {
     }
 
     const statements = [
-      { sql: `INSERT INTO items (id, type, status, pinned, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`, args: [id, type, itemStatus, pinnedVal, now, now] },
+      { sql: `INSERT INTO items (id, type, status, pinned, user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`, args: [id, type, itemStatus, pinnedVal, req.userId, now, now] },
       { sql: `INSERT INTO ${detailTable} (${detailCols.join(', ')}) VALUES (${detailPlaceholders.join(', ')})`, args: detailValues },
     ];
 
@@ -469,17 +517,17 @@ app.post('/api/items', async (req, res) => {
       }
     }
 
-    const item = await getItemById(id);
+    const item = await getItemById(id, req.userId!);
     res.status(201).json({ data: item });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.put('/api/items/:id', async (req, res) => {
+app.put('/api/items/:id', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
-    const existing = await getItemById(id);
+    const existing = await getItemById(id, req.userId!);
     if (!existing) return res.status(404).json({ error: 'Item not found' });
 
     const { status, pinned, tags, ...rest } = req.body;
@@ -503,7 +551,7 @@ app.put('/api/items/:id', async (req, res) => {
     }
 
     const statements: any[] = [
-      { sql: `UPDATE items SET ${itemUpdates.join(', ')} WHERE id = ?`, args: [...itemValues, id] },
+      { sql: `UPDATE items SET ${itemUpdates.join(', ')} WHERE id = ? AND user_id = ?`, args: [...itemValues, id, req.userId] },
     ];
     if (detailUpdates.length > 0) {
       statements.push({ sql: `UPDATE ${detailTable} SET ${detailUpdates.join(', ')} WHERE item_id = ?`, args: [...detailValues, id] });
@@ -526,17 +574,17 @@ app.put('/api/items/:id', async (req, res) => {
       await db.execute('DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM item_tags)');
     }
 
-    const updated = await getItemById(id);
+    const updated = await getItemById(id, req.userId!);
     res.json({ data: updated });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.delete('/api/items/:id', async (req, res) => {
+app.delete('/api/items/:id', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await db.execute({ sql: 'DELETE FROM items WHERE id = ?', args: [id] });
+    const result = await db.execute({ sql: 'DELETE FROM items WHERE id = ? AND user_id = ?', args: [id, req.userId] });
     if (result.rowsAffected === 0) return res.status(404).json({ error: 'Item not found' });
     res.json({ success: true });
   } catch (err: any) {
@@ -544,19 +592,19 @@ app.delete('/api/items/:id', async (req, res) => {
   }
 });
 
-app.patch('/api/items/:id/status', async (req, res) => {
+app.patch('/api/items/:id/status', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
     if (!status || !VALID_STATUSES.includes(status)) {
       return res.status(400).json({ error: `Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}` });
     }
-    const existing = await getItemById(id);
+    const existing = await getItemById(id, req.userId!);
     if (!existing) return res.status(404).json({ error: 'Item not found' });
 
     const now = new Date().toISOString();
-    await db.execute({ sql: 'UPDATE items SET status = ?, updated_at = ? WHERE id = ?', args: [status, now, id] });
-    const updated = await getItemById(id);
+    await db.execute({ sql: 'UPDATE items SET status = ?, updated_at = ? WHERE id = ? AND user_id = ?', args: [status, now, id, req.userId] });
+    const updated = await getItemById(id, req.userId!);
     res.json({ data: updated });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -565,10 +613,11 @@ app.patch('/api/items/:id/status', async (req, res) => {
 
 // ── Stats ────────────────────────────────────────────────────
 
-app.get('/api/stats', async (_req, res) => {
+app.get('/api/stats', authenticate, async (req, res) => {
   try {
-    const statusResult = await db.execute('SELECT status, COUNT(*) as count FROM items GROUP BY status');
-    const typeResult = await db.execute('SELECT type, COUNT(*) as count FROM items GROUP BY type');
+    const uid = req.userId;
+    const statusResult = await db.execute({ sql: 'SELECT status, COUNT(*) as count FROM items WHERE user_id = ? GROUP BY status', args: [uid] });
+    const typeResult = await db.execute({ sql: 'SELECT type, COUNT(*) as count FROM items WHERE user_id = ? GROUP BY type', args: [uid] });
 
     let totalTodo = 0, totalProcess = 0, totalMemo = 0;
     for (const row of statusResult.rows as any[]) {
@@ -581,8 +630,8 @@ app.get('/api/stats', async (_req, res) => {
     for (const row of typeResult.rows as any[]) byType[row.type] = row.count;
     for (const t of VALID_TYPES) { if (!(t in byType)) byType[t] = 0; }
 
-    const booksResult = await db.execute("SELECT COUNT(*) as count FROM items WHERE type = 'reading-book' AND status = 'todo'");
-    const tripsResult = await db.execute("SELECT COUNT(*) as count FROM items WHERE type = 'trip' AND status = 'todo'");
+    const booksResult = await db.execute({ sql: "SELECT COUNT(*) as count FROM items WHERE type = 'reading-book' AND status = 'todo' AND user_id = ?", args: [uid] });
+    const tripsResult = await db.execute({ sql: "SELECT COUNT(*) as count FROM items WHERE type = 'trip' AND status = 'todo' AND user_id = ?", args: [uid] });
 
     res.json({
       data: {
@@ -598,18 +647,18 @@ app.get('/api/stats', async (_req, res) => {
 
 // ── Categories ───────────────────────────────────────────────
 
-app.get('/api/categories', async (_req, res) => {
+app.get('/api/categories', authenticate, async (req, res) => {
   try {
-    const result = await db.execute('SELECT * FROM categories ORDER BY name');
+    const result = await db.execute({ sql: 'SELECT * FROM categories WHERE user_id = ? ORDER BY name', args: [req.userId] });
     res.json({ data: result.rows });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.get('/api/categories/:id', async (req, res) => {
+app.get('/api/categories/:id', authenticate, async (req, res) => {
   try {
-    const result = await db.execute({ sql: 'SELECT * FROM categories WHERE id = ?', args: [req.params.id] });
+    const result = await db.execute({ sql: 'SELECT * FROM categories WHERE id = ? AND user_id = ?', args: [req.params.id, req.userId] });
     if (result.rows.length === 0) return res.status(404).json({ error: 'Category not found' });
     res.json({ data: result.rows[0] });
   } catch (err: any) {
@@ -617,31 +666,31 @@ app.get('/api/categories/:id', async (req, res) => {
   }
 });
 
-app.post('/api/categories', async (req, res) => {
+app.post('/api/categories', authenticate, async (req, res) => {
   try {
     const { name, color, icon } = req.body;
     if (!name || typeof name !== 'string' || name.trim() === '') {
       return res.status(400).json({ error: 'Missing required field: name' });
     }
     const result = await db.execute({
-      sql: 'INSERT INTO categories (name, color, icon) VALUES (?, ?, ?)',
-      args: [name.trim(), color || null, icon || null],
+      sql: 'INSERT INTO categories (name, color, icon, user_id) VALUES (?, ?, ?, ?)',
+      args: [name.trim(), color || null, icon || null, req.userId],
     });
-    const cat = await db.execute({ sql: 'SELECT * FROM categories WHERE id = ?', args: [result.lastInsertRowid] });
+    const cat = await db.execute({ sql: 'SELECT * FROM categories WHERE id = ? AND user_id = ?', args: [result.lastInsertRowid, req.userId] });
     res.status(201).json({ data: cat.rows[0] });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.put('/api/categories/:id', async (req, res) => {
+app.put('/api/categories/:id', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, color, icon } = req.body;
     if (name !== undefined && (typeof name !== 'string' || name.trim() === '')) {
       return res.status(400).json({ error: 'Invalid name: must be a non-empty string' });
     }
-    const existing = await db.execute({ sql: 'SELECT * FROM categories WHERE id = ?', args: [id] });
+    const existing = await db.execute({ sql: 'SELECT * FROM categories WHERE id = ? AND user_id = ?', args: [id, req.userId] });
     if (existing.rows.length === 0) return res.status(404).json({ error: 'Category not found' });
 
     const updates: string[] = [];
@@ -651,18 +700,18 @@ app.put('/api/categories/:id', async (req, res) => {
     if (icon !== undefined) { updates.push('icon = ?'); values.push(icon); }
 
     if (updates.length > 0) {
-      await db.execute({ sql: `UPDATE categories SET ${updates.join(', ')} WHERE id = ?`, args: [...values, id] });
+      await db.execute({ sql: `UPDATE categories SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`, args: [...values, id, req.userId] });
     }
-    const updated = await db.execute({ sql: 'SELECT * FROM categories WHERE id = ?', args: [id] });
+    const updated = await db.execute({ sql: 'SELECT * FROM categories WHERE id = ? AND user_id = ?', args: [id, req.userId] });
     res.json({ data: updated.rows[0] });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.delete('/api/categories/:id', async (req, res) => {
+app.delete('/api/categories/:id', authenticate, async (req, res) => {
   try {
-    const result = await db.execute({ sql: 'DELETE FROM categories WHERE id = ?', args: [req.params.id] });
+    const result = await db.execute({ sql: 'DELETE FROM categories WHERE id = ? AND user_id = ?', args: [req.params.id, req.userId] });
     if (result.rowsAffected === 0) return res.status(404).json({ error: 'Category not found' });
     res.json({ success: true });
   } catch (err: any) {
@@ -672,7 +721,7 @@ app.delete('/api/categories/:id', async (req, res) => {
 
 // ── Search ───────────────────────────────────────────────────
 
-app.get('/api/search', async (req, res) => {
+app.get('/api/search', authenticate, async (req, res) => {
   try {
     const q = req.query.q as string;
     if (!q || q.trim() === '') return res.status(400).json({ error: 'Missing required query parameter: q' });
@@ -681,8 +730,8 @@ app.get('/api/search', async (req, res) => {
     const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
     const terms = q.trim().split(/\s+/).filter(t => t.length > 0);
 
-    const conditions: string[] = [];
-    const values: any[] = [];
+    const conditions: string[] = ['i.user_id = ?'];
+    const values: any[] = [req.userId];
 
     if (req.query.status) { conditions.push('i.status = ?'); values.push(req.query.status); }
     else { conditions.push("i.status = 'memo'"); }
@@ -768,11 +817,11 @@ app.get('/api/search', async (req, res) => {
 
 // ── IT Infra ─────────────────────────────────────────────────
 
-app.get('/api/it-infra', async (req, res) => {
+app.get('/api/it-infra', authenticate, async (req, res) => {
   try {
     const infra = req.query.infra as string;
-    const conditions = ["i.type = 'task-it-infra'"];
-    const values: any[] = [];
+    const conditions = ["i.type = 'task-it-infra'", 'i.user_id = ?'];
+    const values: any[] = [req.userId];
     if (infra) { conditions.push('ti.infra = ?'); values.push(infra); }
 
     const result = await db.execute({
@@ -795,7 +844,7 @@ app.get('/api/it-infra', async (req, res) => {
   }
 });
 
-app.get('/api/it-infra/search', async (req, res) => {
+app.get('/api/it-infra/search', authenticate, async (req, res) => {
   try {
     const q = req.query.q as string;
     if (!q || q.trim() === '') return res.status(400).json({ error: 'Missing required query parameter: q' });
@@ -805,11 +854,11 @@ app.get('/api/it-infra/search', async (req, res) => {
       sql: `SELECT i.*, ti.category, ti.name, ti.due_date, ti.priority, ti.infra,
         ti.item_name, ti.kind, ti.description, ti.url_ip, ti.username, ti.remark
       FROM items i JOIN tasks_it_infra ti ON i.id = ti.item_id
-      WHERE ti.url_ip LIKE ? OR ti.item_name LIKE ? OR ti.infra LIKE ?
+      WHERE i.user_id = ? AND (ti.url_ip LIKE ? OR ti.item_name LIKE ? OR ti.infra LIKE ?
          OR ti.kind LIKE ? OR ti.description LIKE ? OR ti.name LIKE ?
-         OR ti.remark LIKE ? OR ti.category LIKE ?
+         OR ti.remark LIKE ? OR ti.category LIKE ?)
       ORDER BY i.updated_at DESC LIMIT 100`,
-      args: [pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern],
+      args: [req.userId, pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern],
     });
 
     const itemIds = result.rows.map((r: any) => r.id);
