@@ -15,6 +15,28 @@ A personal knowledge management system for tracking tasks, reading, purchases, a
     - Production: Turso (hosted libSQL) via @libsql/client ✓
   - Deployment: Vercel (serverless functions + static frontend) ✓
 
+## AI Tools & Skills
+
+### MCP Servers
+- **context7-mcp** — Fetches live library docs (React, Express, Zustand, Tailwind) instead of relying on training data
+- **codebase-memory-mcp** — Knowledge graph (1,170 nodes, 2,001 edges) for structural code queries and architecture overview
+- **chrome-devtools-mcp** — Lighthouse audits, performance traces, and browser automation
+- **vercel** — Deployment management, build logs, environment variables
+
+### Skills
+- **context7-mcp** — Auto-activated on library/framework questions to fetch current API docs
+- **context-reduce** — Compresses large sessions (10+ files read), creates handoff summaries
+- **ui-ux-pro-max** — Design intelligence: 67 styles, 96 palettes, 57 font pairings, 25 charts, 13 stacks. Used for UI/UX design decisions and component styling
+
+### Agents
+- **frontend-code-writer** — Builds React components, pages, and state management
+- **backend-code-writer** — Creates API endpoints, models, middleware
+- **code-reviewer** — Audits code quality after significant changes
+- **frontend-blamer** — Identifies frontend bugs, performance issues, a11y violations
+- **backend-blamer** — Pinpoints backend issues, slow queries, bad patterns
+- **document-writer** — Generates and updates documentation
+- **ubuntu-sysadmin** — Server configuration and system administration
+
 ---
 
 ## Design System

@@ -20,7 +20,7 @@ Personal knowledge management app. Capture → Process → Memo lifecycle for ta
 - `backend/` — Modular Express dev server (src/index.ts, routes/, models/, middleware/)
 - `api/index.ts` — Production serverless backend (39KB single file, all routes/models/auth consolidated for Vercel)
 - `Deployment/` — Vercel+Turso, Docker, PM2+Nginx strategies
-- `.claude/` — Agents (7), skills (context7-mcp, context-reduce), settings
+- `.claude/` — Agents (7), skills (context7-mcp, context-reduce, ui-ux-pro-max), settings
 
 ## Directory Structure
 
@@ -76,3 +76,11 @@ cd backend && npm run build         # TypeScript compile
 ## Agents
 
 Seven custom agents in `.claude/agents/`: backend-blamer, backend-code-writer, frontend-blamer, frontend-code-writer, code-reviewer, document-writer, ubuntu-sysadmin
+
+## Skills
+
+Three skills in `.claude/skills/`:
+
+- **context7-mcp** — Fetches live library docs (React, Express, Zustand, Tailwind) instead of relying on training data
+- **context-reduce** — Compresses context when sessions get large (10+ files read), creates handoff summaries
+- **ui-ux-pro-max** — Design intelligence: 67 styles, 96 palettes, 57 font pairings, 25 charts, 13 stacks. Use `python3 .claude/skills/ui-ux-pro-max/scripts/search.py "query" --design-system` for design recommendations
