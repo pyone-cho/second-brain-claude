@@ -1,14 +1,9 @@
-<!-- Feedback template. Copy to your repo (e.g. feedback/feedback.md), fill, link in report.md.
-     Use ONE of: interview / feedback / open-issues. This one = written feedback you collected. -->
+# User Feedback — second-brain-claude
 
-# User Feedback — <project name>
-
-- **How collected:** <form / chat / message — and how many people>
-- **When:** <date>
+- **How collected:** chat  — 2 user 
+- **When:** 3-july-2026
 
 ## Raw feedback
-
-<!-- Paste or summarize what people said. Keep their real words where you can. -->
 
 1. Application logic is usabele But UI is confuse. (1st person)
 2. I feel this app might be note or documentation manager for personal use more than commercial. At the dashboard, I thought I am using to do list app. I prefer to this app to be add feature likes daily journal or weekly journal , bookshelf, website links , etc for personal use. And as for me, I want mobile app with inclusive all of these features. (2nd person)
