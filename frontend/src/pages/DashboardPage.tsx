@@ -1,16 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchStats } from '@/api/mock';
 import { useItems } from '@/hooks/useItems';
 import { useAuth } from '@/hooks/useAuth';
-import type { AppStats } from '@/types';
+import { useAppStore } from '@/store';
+import type { AppStats, AnyItem } from '@/types';
 import { TYPE_SHORT_LABELS } from '@/constants';
 import { getItemTitle } from '@/utils/item';
 import { StatsCard } from '@/components/dashboard/StatsCard';
 import { QuickAdd } from '@/components/dashboard/QuickAdd';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { format, formatDistanceToNow, isToday, isYesterday } from 'date-fns';
+import { format, formatDistanceToNow, isToday, isYesterday, isBefore, startOfDay, addDays, parseISO } from 'date-fns';
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -26,6 +27,21 @@ function formatRelativeDate(dateStr: string): string {
   return formatDistanceToNow(date, { addSuffix: true });
 }
 
+function getDueDate(item: AnyItem): string | null {
+  if ((item.type === 'task' || item.type === 'task-it-infra') && item.status !== 'memo') {
+    return item.todo.due_date || null;
+  }
+  return null;
+}
+
+function formatDueDate(dueDate: string): string {
+  const date = parseISO(dueDate);
+  if (isToday(date)) return 'Due today';
+  const now = startOfDay(new Date());
+  if (isBefore(date, now)) return `${formatDistanceToNow(date)} ago`;
+  return `Due ${formatDistanceToNow(date, { addSuffix: true })}`;
+}
+
 export function DashboardPage() {
   const { user } = useAuth();
   const [stats, setStats] = useState<AppStats | null>(null);
@@ -33,6 +49,53 @@ export function DashboardPage() {
   const [statsError, setStatsError] = useState<string | null>(null);
 
   const { items: recentItems } = useItems('memo');
+  const allItems = useAppStore((s) => s.items);
+
+  const overdueItems = useMemo(() => {
+    const today = startOfDay(new Date());
+    return allItems
+      .filter((item) => {
+        const due = getDueDate(item);
+        return due && isBefore(parseISO(due), today);
+      })
+      .sort((a, b) => {
+        const da = getDueDate(a)!;
+        const db = getDueDate(b)!;
+        return parseISO(da).getTime() - parseISO(db).getTime();
+      });
+  }, [allItems]);
+
+  const dueTodayItems = useMemo(() => {
+    return allItems
+      .filter((item) => {
+        const due = getDueDate(item);
+        return due && isToday(parseISO(due));
+      })
+      .sort((a, b) => {
+        const da = getDueDate(a)!;
+        const db = getDueDate(b)!;
+        return parseISO(da).getTime() - parseISO(db).getTime();
+      });
+  }, [allItems]);
+
+  const upcomingItems = useMemo(() => {
+    const today = startOfDay(new Date());
+    const weekFromNow = addDays(today, 7);
+    return allItems
+      .filter((item) => {
+        const due = getDueDate(item);
+        if (!due) return false;
+        const date = parseISO(due);
+        return !isBefore(date, today) && !isBefore(weekFromNow, date) && !isToday(date);
+      })
+      .sort((a, b) => {
+        const da = getDueDate(a)!;
+        const db = getDueDate(b)!;
+        return parseISO(da).getTime() - parseISO(db).getTime();
+      });
+  }, [allItems]);
+
+  const hasActionItems = overdueItems.length > 0 || dueTodayItems.length > 0 || upcomingItems.length > 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -80,7 +143,7 @@ export function DashboardPage() {
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
-          New Item
+          Add Item
         </Link>
       </div>
 
@@ -146,12 +209,13 @@ export function DashboardPage() {
             </div>
             <div className="animate-stagger-4">
               <StatsCard
-                label="Books to Read"
-                value={stats.booksToRead}
-                color="purple"
+                label="Overdue"
+                value={overdueItems.length}
+                color="red"
+                href="/todo"
                 icon={
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 }
               />
@@ -162,8 +226,57 @@ export function DashboardPage() {
 
       {/* Main content grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left column — Recent Activity */}
+        {/* Left column — Action Items + Recent Activity */}
         <div className="lg:col-span-2 space-y-4">
+          {/* Action Items */}
+          <Card padding="md">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                <svg className="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                </svg>
+                Action Items
+              </h2>
+            </div>
+
+            {!hasActionItems ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-3">
+                  <svg className="w-6 h-6 text-emerald-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  All caught up! No actionable items.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {overdueItems.length > 0 && (
+                  <ActionGroup
+                    label="Overdue"
+                    accentColor="red"
+                    items={overdueItems}
+                  />
+                )}
+                {dueTodayItems.length > 0 && (
+                  <ActionGroup
+                    label="Due Today"
+                    accentColor="amber"
+                    items={dueTodayItems}
+                  />
+                )}
+                {upcomingItems.length > 0 && (
+                  <ActionGroup
+                    label="Upcoming (7 days)"
+                    accentColor="blue"
+                    items={upcomingItems}
+                  />
+                )}
+              </div>
+            )}
+          </Card>
+
           <Card padding="md">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
@@ -269,6 +382,70 @@ export function DashboardPage() {
             </Card>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+type ActionGroupAccent = 'red' | 'amber' | 'blue';
+
+const actionAccentMap: Record<ActionGroupAccent, { border: string; label: string; dot: string }> = {
+  red: {
+    border: 'border-l-red-400 dark:border-l-red-500',
+    label: 'text-red-600 dark:text-red-400',
+    dot: 'bg-red-400 dark:bg-red-500',
+  },
+  amber: {
+    border: 'border-l-amber-400 dark:border-l-amber-500',
+    label: 'text-amber-600 dark:text-amber-400',
+    dot: 'bg-amber-400 dark:bg-amber-500',
+  },
+  blue: {
+    border: 'border-l-blue-400 dark:border-l-blue-500',
+    label: 'text-blue-600 dark:text-blue-400',
+    dot: 'bg-blue-400 dark:bg-blue-500',
+  },
+};
+
+function ActionGroup({
+  label,
+  accentColor,
+  items,
+}: {
+  label: string;
+  accentColor: ActionGroupAccent;
+  items: AnyItem[];
+}) {
+  const accent = actionAccentMap[accentColor];
+
+  return (
+    <div>
+      <p className={`text-xs font-semibold uppercase tracking-wide mb-2 ${accent.label}`}>
+        {label} ({items.length})
+      </p>
+      <div className="space-y-1">
+        {items.map((item) => (
+          <Link
+            key={item.id}
+            to={`/items/${item.id}/edit`}
+            className={`flex items-center justify-between py-2 px-3 rounded-lg border-l-2 ${accent.border} hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all duration-150 group`}
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <Badge variant={item.type} size="sm" dot>{TYPE_SHORT_LABELS[item.type] || item.type}</Badge>
+              <span className="text-sm text-slate-700 dark:text-slate-300 truncate group-hover:text-slate-900 dark:group-hover:text-slate-100 transition-colors">
+                {getItemTitle(item)}
+              </span>
+              {item.type === 'task' || item.type === 'task-it-infra' ? (
+                item.todo.priority && item.todo.priority !== 'low' ? (
+                  <Badge variant={item.todo.priority} size="sm">{item.todo.priority}</Badge>
+                ) : null
+              ) : null}
+            </div>
+            <span className="text-xs text-slate-400 dark:text-slate-500 shrink-0 ml-4">
+              {getDueDate(item) ? formatDueDate(getDueDate(item)!) : ''}
+            </span>
+          </Link>
+        ))}
       </div>
     </div>
   );

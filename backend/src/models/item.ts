@@ -252,7 +252,7 @@ export async function getItems(params: {
     LEFT JOIN purchases p ON i.id = p.item_id
     LEFT JOIN trips tr ON i.id = tr.item_id
     ${whereClause}
-    ORDER BY i.pinned DESC, i.created_at DESC
+    ORDER BY i.pinned DESC, i.sort_order ASC, i.created_at DESC
   `;
 
   const result = await client.execute({ sql, args: values });
@@ -575,4 +575,19 @@ export async function updateItemStatus(id: string, newStatus: ItemStatus, userId
     throw new Error('Failed to update item status');
   }
   return updated;
+}
+
+// ---------------------------------------------------------------------------
+// Reorder items (batch update sort_order)
+// ---------------------------------------------------------------------------
+
+export async function reorderItems(
+  userId: string,
+  items: { id: string; sortOrder: number }[]
+): Promise<void> {
+  const statements = items.map((item) => ({
+    sql: 'UPDATE items SET sort_order = ? WHERE id = ? AND user_id = ?',
+    args: [item.sortOrder, item.id, userId],
+  }));
+  await client.batch(statements, 'write');
 }

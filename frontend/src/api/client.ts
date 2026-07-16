@@ -85,6 +85,7 @@ function mapItem(raw: Record<string, unknown>): AnyItem {
     updatedAt: raw.updatedAt as string,
     pinned: raw.pinned as boolean,
     tags: (raw.tags as string[]) || [],
+    sortOrder: (raw.sortOrder as number) ?? (raw.sort_order as number) ?? 0,
   };
 
   const todo = (raw.todo || {}) as Record<string, unknown>;
@@ -261,6 +262,15 @@ export async function moveItemStatus(
     body: JSON.stringify({ status: newStatus }),
   });
   return mapItem(raw);
+}
+
+export async function reorderItems(
+  items: { id: string; sortOrder: number }[]
+): Promise<void> {
+  await request('/items/reorder', {
+    method: 'PATCH',
+    body: JSON.stringify({ items }),
+  });
 }
 
 // ── Categories ──────────────────────────────────────────────

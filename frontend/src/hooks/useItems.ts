@@ -13,7 +13,10 @@ export function useItems(status: ItemStatus) {
   const filtered = useMemo(
     () => items
       .filter((it) => it.status === status)
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
+      .sort((a, b) => {
+        if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      }),
     [items, status]
   );
 

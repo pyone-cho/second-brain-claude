@@ -166,6 +166,9 @@ export async function runMigrations(): Promise<void> {
 
   // ── Incremental migration: add user_id columns if missing ──────
   await migrateAddUserId();
+
+  // ── Incremental migration: add sort_order column if missing ───
+  await migrateAddSortOrder();
 }
 
 /**
@@ -222,6 +225,20 @@ async function migrateAddUserId(): Promise<void> {
     });
 
     console.log('[DB] Migration complete: all existing data assigned to admin user.');
+  }
+}
+
+/**
+ * Add sort_order column to items if it doesn't exist.
+ */
+async function migrateAddSortOrder(): Promise<void> {
+  const result = await client.execute('PRAGMA table_info(items)');
+  const hasSortOrder = result.rows.some((c) => c.name === 'sort_order');
+
+  if (!hasSortOrder) {
+    console.log('[DB] Migrating: adding sort_order column to items...');
+    await client.execute('ALTER TABLE items ADD COLUMN sort_order INTEGER DEFAULT 0');
+    console.log('[DB] Migration complete: sort_order column added.');
   }
 }
 

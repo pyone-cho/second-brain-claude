@@ -12,6 +12,7 @@ import {
   deleteItem as deleteItemApi,
   moveItemStatus as moveItemStatusApi,
   updateItem as updateItemApi,
+  reorderItems as reorderItemsApi,
 } from '@/api/client';
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -47,6 +48,7 @@ interface AppState {
   updateItem: (id: string, updates: Partial<AnyItem>) => void;
   deleteItem: (id: string) => Promise<void>;
   moveItemStatus: (id: string, newStatus: ItemStatus) => Promise<void>;
+  reorderItems: (items: { id: string; sortOrder: number }[]) => Promise<void>;
   togglePin: (id: string) => Promise<void>;
 
   // Category actions
@@ -118,6 +120,16 @@ export const useAppStore = create<AppState>()(
         }));
       },
 
+      reorderItems: async (items) => {
+        await reorderItemsApi(items);
+        set((s) => ({
+          items: s.items.map((it) => {
+            const update = items.find((u) => u.id === it.id);
+            return update ? { ...it, sortOrder: update.sortOrder } as AnyItem : it;
+          }),
+        }));
+      },
+
       togglePin: async (id) => {
         const item = get().items.find((it) => it.id === id);
         if (!item) return;
@@ -176,16 +188,18 @@ export const useAppStore = create<AppState>()(
       getItemsByStatus: (status) =>
         get().items
           .filter((it) => it.status === status)
-          .sort((a, b) =>
-            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-          ),
+          .sort((a, b) => {
+            if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+            return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+          }),
 
       getItemsByType: (status, type) =>
         get().items
           .filter((it) => it.status === status && it.type === type)
-          .sort((a, b) =>
-            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-          ),
+          .sort((a, b) => {
+            if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+            return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+          }),
 
       getItemById: (id) => get().items.find((it) => it.id === id),
 
@@ -398,6 +412,7 @@ export function createEmptyItem(type: ItemType, status: ItemStatus): AnyItem {
     updatedAt: nowISO(),
     pinned: false,
     tags: [] as string[],
+    sortOrder: 0,
   };
 
   switch (type) {

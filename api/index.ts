@@ -102,6 +102,8 @@ async function ensureMigrations() {
   try { await db.execute('ALTER TABLE categories ADD COLUMN user_id TEXT'); } catch {}
   await db.execute('CREATE INDEX IF NOT EXISTS idx_items_user_id ON items(user_id)');
   await db.execute('CREATE INDEX IF NOT EXISTS idx_categories_user_id ON categories(user_id)');
+  // Add sort_order column for drag-and-drop reordering
+  try { await db.execute('ALTER TABLE items ADD COLUMN sort_order INTEGER DEFAULT 0'); } catch {}
   migrationsDone = true;
 }
 
@@ -220,6 +222,7 @@ function buildFullItem(row: Record<string, unknown>, tags: string[]): Record<str
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     pinned: !!(row.pinned as number),
+    sortOrder: (row.sort_order as number) ?? 0,
     tags,
     todo,
     processMemo,
@@ -436,7 +439,7 @@ app.get('/api/items', authenticate, async (req, res) => {
     if (type) { conditions.push('i.type = ?'); values.push(type); }
     const where = `WHERE ${conditions.join(' AND ')}`;
 
-    const result = await db.execute({ sql: `${ITEMS_JOIN_SQL} ${where} ORDER BY i.pinned DESC, i.created_at DESC`, args: values });
+    const result = await db.execute({ sql: `${ITEMS_JOIN_SQL} ${where} ORDER BY i.pinned DESC, i.sort_order ASC, i.created_at DESC`, args: values });
     if (result.rows.length === 0) return res.json({ data: [] });
 
     const itemIds = result.rows.map((r: any) => r.id);
@@ -590,6 +593,23 @@ app.delete('/api/items/:id', authenticate, async (req, res) => {
     const { id } = req.params;
     const result = await db.execute({ sql: 'DELETE FROM items WHERE id = ? AND user_id = ?', args: [id, uid(req)] });
     if (result.rowsAffected === 0) return res.status(404).json({ error: 'Item not found' });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/items/reorder', authenticate, async (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Missing or empty items array' });
+    }
+    const statements = items.map((item: any) => ({
+      sql: 'UPDATE items SET sort_order = ? WHERE id = ? AND user_id = ?',
+      args: [item.sortOrder, item.id, uid(req)],
+    }));
+    await db.batch(statements, 'write');
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

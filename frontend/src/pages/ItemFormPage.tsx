@@ -125,7 +125,7 @@ export function ItemFormPage() {
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-          {isEditing ? 'Edit Item' : 'New Item'}
+          {isEditing ? 'Edit Item' : 'Create Item'}
         </h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
           {isEditing ? 'Update item details' : 'Add a new item to your second brain'}

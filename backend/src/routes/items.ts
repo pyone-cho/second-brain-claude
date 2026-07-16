@@ -7,6 +7,7 @@ import {
   updateItem,
   deleteItem,
   updateItemStatus,
+  reorderItems,
 } from '../models/item.js';
 import { validateStatus, validateType } from '../middleware/validate.js';
 
@@ -119,6 +120,30 @@ router.delete('/:id', async (req, res, next) => {
       throw new AppError(404, 'Item not found');
     }
 
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PATCH /api/items/reorder
+ * Batch update sort_order for multiple items.
+ */
+router.patch('/reorder', async (req, res, next) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new AppError(400, 'Missing or empty items array');
+    }
+
+    for (const item of items) {
+      if (!item.id || typeof item.sortOrder !== 'number') {
+        throw new AppError(400, 'Each item must have id and sortOrder');
+      }
+    }
+
+    await reorderItems(req.userId!, items);
     res.json({ success: true });
   } catch (err) {
     next(err);

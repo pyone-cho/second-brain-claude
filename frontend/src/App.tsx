@@ -19,6 +19,9 @@ const ProcessPage = lazy(() =>
 const MemoPage = lazy(() =>
   import('@/pages/MemoPage').then((m) => ({ default: m.MemoPage }))
 );
+const KanbanPage = lazy(() =>
+  import('@/pages/KanbanPage').then((m) => ({ default: m.KanbanPage }))
+);
 const ItemFormPage = lazy(() =>
   import('@/pages/ItemFormPage').then((m) => ({ default: m.ItemFormPage }))
 );
@@ -65,6 +68,7 @@ export function App() {
                   <Suspense fallback={<PageFallback />}>
                     <Routes>
                       <Route path="/" element={<DashboardPage />} />
+                      <Route path="/kanban" element={<KanbanPage />} />
                       <Route path="/todo" element={<TodoPage />} />
                       <Route path="/process" element={<ProcessPage />} />
                       <Route path="/memo" element={<MemoPage />} />

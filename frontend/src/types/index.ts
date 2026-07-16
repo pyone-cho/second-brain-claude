@@ -25,6 +25,7 @@ export interface BaseItem {
   updatedAt: string;
   pinned: boolean;
   tags: string[];
+  sortOrder: number;
 }
 
 // ── Task (Ordinary) ───────────────────────────────────────────
