@@ -143,7 +143,7 @@ export function DashboardPage() {
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
-          New Item
+          Add Item
         </Link>
       </div>
 
