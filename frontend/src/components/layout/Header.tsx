@@ -78,6 +78,9 @@ export function Header() {
           <NavLink to="/" current={location.pathname}>
             Dashboard
           </NavLink>
+          <NavLink to="/kanban" current={location.pathname}>
+            Board
+          </NavLink>
           <NavLink to="/todo" current={location.pathname}>
             Todo
           </NavLink>
