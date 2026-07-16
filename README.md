@@ -17,6 +17,30 @@ A personal knowledge management app built around the **Capture → Process → M
 - **Analytics** — GoatCounter self-hosted analytics with SRI integrity
 - **Dark Mode** — Built-in theme toggle
 
+## Screenshots
+
+### Login
+
+![Login page — desktop 1280×800](docs/screenshots/login-desktop.png)
+
+### Dashboard
+
+![Dashboard — desktop 1280×800](docs/screenshots/dashboard-desktop.png)
+
+![Dashboard — mobile 390×844](docs/screenshots/dashboard-mobile.png)
+
+### Kanban Board
+
+![Kanban board — desktop 1280×800](docs/screenshots/kanban-desktop.png)
+
+![Kanban board — mobile 390×844](docs/screenshots/kanban-mobile.png)
+
+### Todo List
+
+![Todo list — desktop 1280×800](docs/screenshots/todo-desktop.png)
+
+![Todo list — mobile 390×844](docs/screenshots/todo-mobile.png)
+
 ## Tech Stack
 
 | Layer | Stack |
